@@ -20,7 +20,10 @@ executable proofcas
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.8 && <4.9,
-                       reflex-dom
+                       reflex-dom,
+                       ghcjs-dom,
+                       file-embed,
+                       containers
   hs-source-dirs:      src
   default-language:    Haskell2010
 
