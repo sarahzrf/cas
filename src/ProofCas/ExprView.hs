@@ -1,6 +1,5 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE OverloadedStrings #-}
 module ProofCas.ExprView where
 
 import Reflex.Dom
@@ -10,11 +9,11 @@ import GHCJS.DOM.Types (IsMouseEvent)
 import GHCJS.DOM.MouseEvent (getDataTransfer)
 import GHCJS.DOM.DataTransfer
 #endif
-import Morte.Core
-import Data.Text.Lazy
 import Data.Monoid
 import Data.List
+import Data.Foldable
 import ProofCas.Hovering
+import ProofCas.Pretty
 
 setCurrentDragData :: IsMouseEvent e => String -> EventM t e ()
 #ifdef __GHCJS__
@@ -52,30 +51,38 @@ exprSpan exprType contents = do
 textSpan :: MonadWidget t m => String -> m ()
 textSpan content = elClass "span" "text" $ text content
 
-renderExpr :: MonadWidget t m => Expr X -> m ()
-renderExpr (Const Star) = exprSpan "const" $ textSpan "*"
-renderExpr (Const Box)  = exprSpan "const" $ textSpan "\9633"
-renderExpr (Var v)      = exprSpan "var" $ textSpan (unpack (pretty v))
-renderExpr (Embed x)    = absurd x
+binders :: MonadWidget t m => [(String, DisplayExpr)] -> m ()
+binder (v, d) = do
+  textSpan $ "(" ++ v ++ " : "
+  renderDExpr d
+  textSpan ")"
+binders = sequenceA_ . intersperse (textSpan " ") . map binder
 
-renderExpr (Lam v d b) = exprSpan "lam" $ do
-  textSpan $ "\955(" ++ unpack v ++ " : "
-  renderExpr d
-  textSpan ") \8594 "
-  renderExpr b
-renderExpr (Pi "_" d c) = exprSpan "pi" $ do
-  renderExpr d
+renderDExpr :: MonadWidget t m => DisplayExpr -> m ()
+renderDExpr DStar    = exprSpan "star" $ textSpan "*"
+renderDExpr DBox     = exprSpan "box"  $ textSpan "\9633"
+renderDExpr (DVar v) = exprSpan "var" $ textSpan v
+
+renderDExpr (DLam p b) = exprSpan "lam" $ do
+  textSpan "\955"
+  binders p
   textSpan " \8594 "
-  renderExpr c
-renderExpr (Pi v d c) = exprSpan "pi" $ do
-  textSpan $ "\8704(" ++ unpack v ++ " : "
-  renderExpr d
-  textSpan "), "
-  renderExpr c
-renderExpr (App f a) = exprSpan "app" $ do
-  textSpan "("
-  renderExpr f
+  renderDExpr b
+renderDExpr (DPi p c) = exprSpan "pi" $ do
+  textSpan "\8704"
+  binders p
+  textSpan ", "
+  renderDExpr c
+renderDExpr (Arr d c) = exprSpan "arr" $ do
+  renderDExpr d
+  textSpan " \8594 "
+  renderDExpr c
+renderDExpr (DApp f a) = exprSpan "app" $ do
+  renderDExpr f
   textSpan " "
-  renderExpr a
+  renderDExpr a
+renderDExpr (Par e) = do
+  textSpan "("
+  renderDExpr e
   textSpan ")"
 
