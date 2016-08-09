@@ -1,5 +1,6 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
 module ProofCas.TermView where
 
 import Reflex.Dom
@@ -9,19 +10,18 @@ import GHCJS.DOM.Types (IsMouseEvent)
 import GHCJS.DOM.MouseEvent (getDataTransfer)
 import GHCJS.DOM.DataTransfer
 #endif
+import Morte.Core
+import Data.Text.Lazy
 import Data.Monoid
 import Data.List
 import ProofCas.Hovering
-
-data Term = Constant String | App Term [Term] | Infix String Term Term
-  deriving (Show)
 
 setCurrentDragData :: IsMouseEvent e => String -> EventM t e ()
 #ifdef __GHCJS__
 setCurrentDragData d = do
   e <- event
   Just dt <- getDataTransfer e
-  setData dt "src" d
+  setData dt ("src" :: String) d
 #else
 setCurrentDragData _ = return ()
 #endif
@@ -52,15 +52,30 @@ termSpan termType contents = do
 textSpan :: MonadWidget t m => String -> m ()
 textSpan content = elClass "span" "text" $ text content
 
-renderTerm :: MonadWidget t m => Term -> m ()
-renderTerm (Constant name) = termSpan "constant" $ textSpan name
-renderTerm (App f xs) = termSpan "app" $ do
-  renderTerm f
+renderTerm :: MonadWidget t m => Expr X -> m ()
+renderTerm (Const Star) = termSpan "const" $ textSpan "*"
+renderTerm (Const Box)  = termSpan "const" $ textSpan "\9633"
+renderTerm (Var v)      = termSpan "var" $ textSpan (unpack (pretty v))
+renderTerm (Embed x)    = absurd x
+
+renderTerm (Lam v d b) = termSpan "lam" $ do
+  textSpan $ "\955(" ++ unpack v ++ " : "
+  renderTerm d
+  textSpan ") \8594 "
+  renderTerm b
+renderTerm (Pi "_" d c) = termSpan "pi" $ do
+  renderTerm d
+  textSpan " \8594 "
+  renderTerm c
+renderTerm (Pi v d c) = termSpan "pi" $ do
+  textSpan $ "\8704(" ++ unpack v ++ " : "
+  renderTerm d
+  textSpan "), "
+  renderTerm c
+renderTerm (App f a) = termSpan "app" $ do
   textSpan "("
-  sequence_ $ intersperse (textSpan ", ") (map renderTerm xs)
+  renderTerm f
+  textSpan " "
+  renderTerm a
   textSpan ")"
-renderTerm (Infix op l r) = termSpan "infix" $ do
-  renderTerm l
-  textSpan (" " ++ op ++ " ")
-  renderTerm r
 
