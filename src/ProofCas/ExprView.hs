@@ -1,7 +1,7 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
-module ProofCas.TermView where
+module ProofCas.ExprView where
 
 import Reflex.Dom
 import GHCJS.DOM.EventM (EventM, preventDefault, stopPropagation, event)
@@ -30,8 +30,8 @@ wrapDomEvent' el en a = do
   e <- wrapDomEvent el en a
   performEvent_ (return () <$ e)
 
-termSpan :: (Reflex t, MonadWidget t m) => String -> m a -> m a
-termSpan termType contents = do
+exprSpan :: (Reflex t, MonadWidget t m) => String -> m a -> m a
+exprSpan exprType contents = do
   rec
     (span, a) <- elDynAttr' "span" attrs contents
 
@@ -40,7 +40,7 @@ termSpan termType contents = do
     dropE <- wrapDomEvent (_el_element span) (onEventName Drop) (False <$ stopPropagation)
 
     let dragHovE' = leftmost [dropE, dragHovE]
-    classes <- classesFor $ "term-mouseover" =: hovE <> "term-dragenter" =: dragHovE'
+    classes <- classesFor $ "expr-mouseover" =: hovE <> "expr-dragenter" =: dragHovE'
 
     let plainAttrs = constDyn $ "draggable" =: "true"
     attrs <- setClasses classes plainAttrs
@@ -52,30 +52,30 @@ termSpan termType contents = do
 textSpan :: MonadWidget t m => String -> m ()
 textSpan content = elClass "span" "text" $ text content
 
-renderTerm :: MonadWidget t m => Expr X -> m ()
-renderTerm (Const Star) = termSpan "const" $ textSpan "*"
-renderTerm (Const Box)  = termSpan "const" $ textSpan "\9633"
-renderTerm (Var v)      = termSpan "var" $ textSpan (unpack (pretty v))
-renderTerm (Embed x)    = absurd x
+renderExpr :: MonadWidget t m => Expr X -> m ()
+renderExpr (Const Star) = exprSpan "const" $ textSpan "*"
+renderExpr (Const Box)  = exprSpan "const" $ textSpan "\9633"
+renderExpr (Var v)      = exprSpan "var" $ textSpan (unpack (pretty v))
+renderExpr (Embed x)    = absurd x
 
-renderTerm (Lam v d b) = termSpan "lam" $ do
+renderExpr (Lam v d b) = exprSpan "lam" $ do
   textSpan $ "\955(" ++ unpack v ++ " : "
-  renderTerm d
+  renderExpr d
   textSpan ") \8594 "
-  renderTerm b
-renderTerm (Pi "_" d c) = termSpan "pi" $ do
-  renderTerm d
+  renderExpr b
+renderExpr (Pi "_" d c) = exprSpan "pi" $ do
+  renderExpr d
   textSpan " \8594 "
-  renderTerm c
-renderTerm (Pi v d c) = termSpan "pi" $ do
+  renderExpr c
+renderExpr (Pi v d c) = exprSpan "pi" $ do
   textSpan $ "\8704(" ++ unpack v ++ " : "
-  renderTerm d
+  renderExpr d
   textSpan "), "
-  renderTerm c
-renderTerm (App f a) = termSpan "app" $ do
+  renderExpr c
+renderExpr (App f a) = exprSpan "app" $ do
   textSpan "("
-  renderTerm f
+  renderExpr f
   textSpan " "
-  renderTerm a
+  renderExpr a
   textSpan ")"
 
