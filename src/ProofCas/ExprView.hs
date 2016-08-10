@@ -59,30 +59,33 @@ binder (v, d) = do
 binders = sequenceA_ . intersperse (textSpan " ") . map binder
 
 renderDExpr :: MonadWidget t m => DisplayExpr -> m ()
-renderDExpr DStar    = exprSpan "star" $ textSpan "*"
-renderDExpr DBox     = exprSpan "box"  $ textSpan "\9633"
-renderDExpr (DVar v) = exprSpan "var" $ textSpan v
+renderDExpr (NoPar pa e) = renderDEL e
+renderDExpr (Par   pa e) = do
+  textSpan "("
+  renderDEL e
+  textSpan ")"
 
-renderDExpr (DLam p b) = exprSpan "lam" $ do
+renderDEL :: MonadWidget t m => DELevel DisplayExpr -> m ()
+renderDEL DStar    = exprSpan "star" $ textSpan "*"
+renderDEL DBox     = exprSpan "box"  $ textSpan "\9633"
+renderDEL (DVar v) = exprSpan "var" $ textSpan v
+
+renderDEL (DLam p b) = exprSpan "lam" $ do
   textSpan "\955"
   binders p
   textSpan " \8594 "
   renderDExpr b
-renderDExpr (DPi p c) = exprSpan "pi" $ do
+renderDEL (DPi p c) = exprSpan "pi" $ do
   textSpan "\8704"
   binders p
   textSpan ", "
   renderDExpr c
-renderDExpr (Arr d c) = exprSpan "arr" $ do
+renderDEL (Arr d c) = exprSpan "arr" $ do
   renderDExpr d
   textSpan " \8594 "
   renderDExpr c
-renderDExpr (DApp f a) = exprSpan "app" $ do
+renderDEL (DApp f a) = exprSpan "app" $ do
   renderDExpr f
   textSpan " "
   renderDExpr a
-renderDExpr (Par e) = do
-  textSpan "("
-  renderDExpr e
-  textSpan ")"
 
