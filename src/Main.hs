@@ -8,8 +8,9 @@ import Data.FileEmbed
 import Morte.Core
 import Morte.Parser
 import Text.Read
-import Data.Text.Lazy
+import qualified Data.Text.Lazy as TL
 import Control.Applicative (liftA2)
+import Control.Monad
 import ProofCas.Pretty
 import ProofCas.ExprView
 
@@ -19,26 +20,22 @@ deriving instance Read a => Read (Expr a)
 instance Read X where
   readsPrec _ _ = []
 
-example = Lam "i" idft (App (App (Var "i") idft) (Var "i"))
-  where idft = Pi "A" (Morte.Core.Const Star) (Pi "_" (Var "A") (Var "A"))
-
 clearEmbeds :: Expr Path -> Maybe (Expr X)
 clearEmbeds = traverse (const Nothing)
 
-fromCode c = case clearEmbeds <$> exprFromText (pack c) of
+fromCode c = case clearEmbeds <$> exprFromText (TL.pack c) of
   Left err          -> text (show err)
   Right Nothing     -> text "You can't import stuff here."
-  Right (Just expr) -> renderDExpr (displayExpr expr)
+  Right (Just expr) -> exprWidget expr
 
 fromCode' c = case readMaybe c of
   Nothing   -> text "No read."
-  Just expr -> renderDExpr (displayExpr expr)
+  Just expr -> exprWidget expr
 
 main :: IO ()
 main = mainWidgetWithCss $(embedFile "expr.css") $ do
   ti <- el "div" $ textInput def
-  el "div" $ do
-    let newCode = tagDyn (value ti) (textInputGetEnter ti)
-    widgetHold (return ()) $ fromCode' <$> newCode
+  let newCode = tagDyn (value ti) (textInputGetEnter ti)
+  widgetHold (return ()) $ fromCode' <$> newCode
   return ()
 

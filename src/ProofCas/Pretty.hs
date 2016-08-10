@@ -4,7 +4,7 @@
 module ProofCas.Pretty where
 
 import Morte.Core hiding (Path)
-import Data.Text.Lazy
+import qualified Data.Text.Lazy as TL
 import ProofCas.Paths
 
 data DELevel a
@@ -28,10 +28,10 @@ toDE' cur e = NoPar' cur (go e)
   where
     go (Const Star) = DStar
     go (Const Box)  = DBox
-    go (Var v)      = DVar . unpack . pretty $ v
-    go (Lam v d b)  = DLam [(unpack v, toDE' (LamDom:cur) d)] (toDE' (LamBody:cur) b)
+    go (Var v)      = DVar . TL.unpack . pretty $ v
+    go (Lam v d b)  = DLam [(TL.unpack v, toDE' (LamDom:cur) d)] (toDE' (LamBody:cur) b)
     go (Pi "_" d c) = Arr (toDE' (PiDom:cur) d) (toDE' (PiCod:cur) c)
-    go (Pi v d c)   = DPi [(unpack v, toDE' (PiDom:cur) d)] (toDE' (PiCod:cur) c)
+    go (Pi v d c)   = DPi [(TL.unpack v, toDE' (PiDom:cur) d)] (toDE' (PiCod:cur) c)
     go (App f a)    = DApp (toDE' (AppFunc:cur) f) (toDE' (AppArg:cur) a)
     go (Embed x)    = absurd x
 

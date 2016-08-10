@@ -11,81 +11,108 @@ import GHCJS.DOM.DataTransfer
 #endif
 import Data.Monoid
 import Data.List
-import Data.Foldable
+import Morte.Core hiding (Path)
+import Control.Lens
 import ProofCas.Hovering
 import ProofCas.Pretty
+import ProofCas.Paths
 
-setCurrentDragData :: IsMouseEvent e => String -> EventM t e ()
+setCurrentDragData :: IsMouseEvent e => String -> String -> EventM t e ()
 #ifdef __GHCJS__
-setCurrentDragData d = do
+setCurrentDragData k v = do
   e <- event
   Just dt <- getDataTransfer e
-  setData dt ("src" :: String) d
+  setData dt k v
 #else
-setCurrentDragData _ = return ()
+setCurrentDragData _ _ = return ()
 #endif
 
 wrapDomEvent' el en a = do
-  e <- wrapDomEvent el en a
+  e <- wrapDomEvent el (onEventName en) a
   performEvent_ (return () <$ e)
 
-exprSpan :: (Reflex t, MonadWidget t m) => String -> m a -> m a
-exprSpan exprType contents = do
+exprSpan :: (Reflex t, MonadWidget t m) => String -> Demux t Path -> m [Event t Path] -> Path -> m [Event t Path]
+exprSpan exprType selection contents pa = do
   rec
-    (span, a) <- elDynAttr' "span" attrs contents
+    (span, es) <- elDynAttr' "span" attrs contents
 
     hovE <- hovering span Mouseleave Mouseover
     dragHovE <- hovering span Dragleave Dragenter
     dropE <- wrapDomEvent (_el_element span) (onEventName Drop) (False <$ stopPropagation)
+    selectedE <- updated <$> getDemuxed selection pa
 
     let dragHovE' = leftmost [dropE, dragHovE]
-    classes <- classesFor $ "expr-mouseover" =: hovE <> "expr-dragenter" =: dragHovE'
+    classes <- classesFor $
+      "expr-mouseover" =: hovE <>
+      "expr-dragenter" =: dragHovE' <>
+      "expr-selected" =: selectedE
 
     let plainAttrs = constDyn $ "draggable" =: "true"
     attrs <- setClasses classes plainAttrs
 
-  wrapDomEvent' (_el_element span) (onEventName Dragstart) (setCurrentDragData "dummy")
-  wrapDomEvent' (_el_element span) (onEventName Dragover) preventDefault
-  return a
+  wrapDomEvent' (_el_element span) Dragstart (setCurrentDragData "dummy" "dummy")
+  wrapDomEvent' (_el_element span) Dragover preventDefault
+  clicked <- ownEvent Click span
+  return $ (pa <$ clicked):es
 
 textSpan :: MonadWidget t m => String -> m ()
 textSpan content = elClass "span" "text" $ text content
 
-binders :: MonadWidget t m => [(String, DisplayExpr)] -> m ()
-binder (v, d) = do
+binder selection (v, d) = do
   textSpan $ "(" ++ v ++ " : "
-  renderDExpr d
+  es <- renderDExpr d selection
   textSpan ")"
-binders = sequenceA_ . intersperse (textSpan " ") . map binder
+  return es
+binders selection = sequenceA . intersperse ([] <$ textSpan " ") . map (binder selection)
 
-renderDExpr :: MonadWidget t m => DisplayExpr -> m ()
-renderDExpr (NoPar pa e) = renderDEL e
-renderDExpr (Par   pa e) = do
+renderDExpr :: MonadWidget t m => DisplayExpr -> Demux t Path -> m [Event t Path]
+renderDExpr (NoPar pa e) selection = renderDEL e selection pa
+renderDExpr (Par   pa e) selection = do
   textSpan "("
-  renderDEL e
-  textSpan ")"
+  renderDEL e selection pa <* textSpan ")"
 
-renderDEL :: MonadWidget t m => DELevel DisplayExpr -> m ()
-renderDEL DStar    = exprSpan "star" $ textSpan "*"
-renderDEL DBox     = exprSpan "box"  $ textSpan "\9633"
-renderDEL (DVar v) = exprSpan "var" $ textSpan v
+renderDEL :: MonadWidget t m => DELevel DisplayExpr -> Demux t Path -> Path -> m [Event t Path]
+renderDEL DStar    selection = exprSpan "star" selection $ [] <$ textSpan "*"
+renderDEL DBox     selection = exprSpan "box" selection $ [] <$ textSpan "\9633"
+renderDEL (DVar v) selection = exprSpan "var" selection $ [] <$ textSpan v
 
-renderDEL (DLam p b) = exprSpan "lam" $ do
+renderDEL (DLam p b) selection = exprSpan "lam" selection $ do
   textSpan "\955"
-  binders p
+  es <- concat <$> binders selection p
   textSpan " \8594 "
-  renderDExpr b
-renderDEL (DPi p c) = exprSpan "pi" $ do
+  es' <- renderDExpr b selection
+  return $ es ++ es'
+renderDEL (DPi p c) selection = exprSpan "pi" selection $ do
   textSpan "\8704"
-  binders p
+  es <- concat <$> binders selection p
   textSpan ", "
-  renderDExpr c
-renderDEL (Arr d c) = exprSpan "arr" $ do
-  renderDExpr d
+  es' <- renderDExpr c selection
+  return $ es ++ es'
+renderDEL (Arr d c) selection = exprSpan "arr" selection $ do
+  es <- renderDExpr d selection
   textSpan " \8594 "
-  renderDExpr c
-renderDEL (DApp f a) = exprSpan "app" $ do
-  renderDExpr f
+  es' <- renderDExpr c selection
+  return $ es ++ es'
+renderDEL (DApp f a) selection = exprSpan "app" selection $ do
+  es <- renderDExpr f selection
   textSpan " "
-  renderDExpr a
+  es' <- renderDExpr a selection
+  return $ es ++ es'
+
+exprWidget :: MonadWidget t m => Expr X -> m ()
+exprWidget e = do
+  rec
+    eDyn <- foldDyn ($) e $ mergeWith (.) [eq]
+    body <- mapDyn (widgetBody d spc selection) eDyn
+    (d, clickedE) <- elAttr' "div" ("tabindex" =: "1") (dyn body)
+    clicked <- switchPromptly never clickedE
+    selection <- foldDyn ($) [] $ mergeWith (.) [clicked, spc]
+    let kp = domEvent Keydown d
+        spc = parent <$ ffilter (==32) kp
+        eq = ffor (tagDyn selection (ffilter (==61) kp)) $ \sel -> path sel%~normalize
+  return ()
+
+widgetBody d spc selection e = do
+  es <- renderDExpr (displayExpr e) (demux selection)
+  return $ const <$> leftmost es
 

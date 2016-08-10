@@ -6,9 +6,13 @@ import Data.List (foldl')
 
 data PathStep =
   LamDom | LamBody | PiDom | PiCod | AppFunc | AppArg
-  deriving (Eq)
+  deriving (Eq, Ord, Show)
 
 type Path = [PathStep]
+
+parent :: Path -> Path
+parent [] = []
+parent (s:ss) = ss
 
 step :: Applicative f => PathStep ->
   (Expr a -> f (Expr a)) -> Expr a -> f (Expr a)
