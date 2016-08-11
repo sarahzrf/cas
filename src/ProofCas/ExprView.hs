@@ -2,7 +2,7 @@
 {-# LANGUAGE CPP #-}
 module ProofCas.ExprView where
 
-import Reflex.Dom
+import Reflex.Dom hiding (preventDefault, stopPropagation)
 import GHCJS.DOM.EventM (EventM, preventDefault, stopPropagation, event)
 import GHCJS.DOM.Types (IsMouseEvent)
 #ifdef __GHCJS__
@@ -11,6 +11,7 @@ import GHCJS.DOM.DataTransfer
 #endif
 import Data.Monoid
 import Data.List
+import qualified Data.Text as T
 import Morte.Core hiding (Path)
 import Control.Lens
 import ProofCas.Hovering
@@ -31,15 +32,15 @@ wrapDomEvent' el en a = do
   e <- wrapDomEvent el (onEventName en) a
   performEvent_ (return () <$ e)
 
-exprSpan :: (Reflex t, MonadWidget t m) => String -> Demux t Path -> m [Event t Path] -> Path -> m [Event t Path]
+exprSpan :: (Reflex t, MonadWidget t m) => T.Text -> Demux t Path -> m [Event t Path] -> Path -> m [Event t Path]
 exprSpan exprType selection contents pa = do
   rec
     (span, es) <- elDynAttr' "span" attrs contents
 
     hovE <- hovering span Mouseleave Mouseover
     dragHovE <- hovering span Dragleave Dragenter
-    dropE <- wrapDomEvent (_el_element span) (onEventName Drop) (False <$ stopPropagation)
-    selectedE <- updated <$> getDemuxed selection pa
+    dropE <- wrapDomEvent (_element_raw span) (onEventName Drop) (False <$ stopPropagation)
+    let selectedE = updated (demuxed selection pa)
 
     let dragHovE' = leftmost [dropE, dragHovE]
     classes <- classesFor $
@@ -48,18 +49,18 @@ exprSpan exprType selection contents pa = do
       "expr-selected" =: selectedE
 
     let plainAttrs = constDyn $ "draggable" =: "true"
-    attrs <- setClasses classes plainAttrs
+        attrs      = setClasses classes plainAttrs
 
-  wrapDomEvent' (_el_element span) Dragstart (setCurrentDragData "dummy" "dummy")
-  wrapDomEvent' (_el_element span) Dragover preventDefault
+  wrapDomEvent' (_element_raw span) Dragstart (setCurrentDragData "dummy" "dummy")
+  wrapDomEvent' (_element_raw span) Dragover preventDefault
   clicked <- ownEvent Click span
   return $ (pa <$ clicked):es
 
-textSpan :: MonadWidget t m => String -> m ()
+textSpan :: MonadWidget t m => T.Text -> m ()
 textSpan content = elClass "span" "text" $ text content
 
 binder selection (v, d) = do
-  textSpan $ "(" ++ v ++ " : "
+  textSpan $ T.concat ["(", v, " : "]
   es <- renderDExpr d selection
   textSpan ")"
   return es
@@ -103,13 +104,13 @@ exprWidget :: MonadWidget t m => Expr X -> m ()
 exprWidget e = do
   rec
     eDyn <- foldDyn ($) e $ mergeWith (.) [eq]
-    body <- mapDyn (widgetBody d spc selection) eDyn
+    let body = widgetBody d spc selection <$> eDyn
     (d, clickedE) <- elAttr' "div" ("tabindex" =: "1") (dyn body)
     clicked <- switchPromptly never clickedE
     selection <- foldDyn ($) [] $ mergeWith (.) [clicked, spc]
     let kp = domEvent Keydown d
         spc = parent <$ ffilter (==32) kp
-        eq = ffor (tagDyn selection (ffilter (==61) kp)) $ \sel -> path sel%~normalize
+        eq = ffor (tagPromptlyDyn selection (ffilter (==61) kp)) $ \sel -> path sel%~normalize
   return ()
 
 widgetBody d spc selection e = do

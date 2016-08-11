@@ -1,5 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module Main where
 
@@ -8,6 +7,7 @@ import Data.FileEmbed
 import Morte.Core
 import Morte.Parser
 import Text.Read
+import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Control.Applicative (liftA2)
 import Control.Monad
@@ -23,19 +23,19 @@ instance Read X where
 clearEmbeds :: Expr Path -> Maybe (Expr X)
 clearEmbeds = traverse (const Nothing)
 
-fromCode c = case clearEmbeds <$> exprFromText (TL.pack c) of
-  Left err          -> text (show err)
+fromCode c = case clearEmbeds <$> exprFromText (TL.pack (T.unpack c)) of
+  Left err          -> text (T.pack (show err))
   Right Nothing     -> text "You can't import stuff here."
   Right (Just expr) -> exprWidget expr
 
-fromCode' c = case readMaybe c of
+fromCode' c = case readMaybe (T.unpack c) of
   Nothing   -> text "No read."
   Just expr -> exprWidget expr
 
 main :: IO ()
 main = mainWidgetWithCss $(embedFile "expr.css") $ do
   ti <- el "div" $ textInput def
-  let newCode = tagDyn (value ti) (textInputGetEnter ti)
+  let newCode = tagPromptlyDyn (value ti) (textInputGetEnter ti)
   widgetHold (return ()) $ fromCode' <$> newCode
   return ()
 

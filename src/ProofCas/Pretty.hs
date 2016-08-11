@@ -1,18 +1,18 @@
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 module ProofCas.Pretty where
 
 import Morte.Core hiding (Path)
+import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import ProofCas.Paths
 
 data DELevel a
   = DStar
   | DBox
-  | DVar String
-  | DLam [(String, a)] a
-  | DPi [(String, a)] a
+  | DVar T.Text
+  | DLam [(T.Text, a)] a
+  | DPi [(T.Text, a)] a
   | Arr a a
   | DApp a a
   deriving Functor
@@ -28,10 +28,10 @@ toDE' cur e = NoPar' cur (go e)
   where
     go (Const Star) = DStar
     go (Const Box)  = DBox
-    go (Var v)      = DVar . TL.unpack . pretty $ v
-    go (Lam v d b)  = DLam [(TL.unpack v, toDE' (LamDom:cur) d)] (toDE' (LamBody:cur) b)
+    go (Var v)      = DVar . T.pack . TL.unpack . pretty $ v
+    go (Lam v d b)  = DLam [(T.pack (TL.unpack v), toDE' (LamDom:cur) d)] (toDE' (LamBody:cur) b)
     go (Pi "_" d c) = Arr (toDE' (PiDom:cur) d) (toDE' (PiCod:cur) c)
-    go (Pi v d c)   = DPi [(TL.unpack v, toDE' (PiDom:cur) d)] (toDE' (PiCod:cur) c)
+    go (Pi v d c)   = DPi [(T.pack (TL.unpack v), toDE' (PiDom:cur) d)] (toDE' (PiCod:cur) c)
     go (App f a)    = DApp (toDE' (AppFunc:cur) f) (toDE' (AppArg:cur) a)
     go (Embed x)    = absurd x
 
