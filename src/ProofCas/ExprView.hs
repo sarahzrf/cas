@@ -4,7 +4,7 @@ module ProofCas.ExprView where
 
 import Reflex.Dom hiding (preventDefault, stopPropagation)
 import GHCJS.DOM.EventM (EventM, preventDefault, stopPropagation, event)
-import GHCJS.DOM.Types (IsMouseEvent)
+import GHCJS.DOM.Types (IsMouseEvent, IsElement, IsEvent)
 #ifdef __GHCJS__
 import GHCJS.DOM.MouseEvent (getDataTransfer)
 import GHCJS.DOM.DataTransfer
@@ -100,21 +100,25 @@ renderDEL (DApp f a) selection = exprSpan "app" selection $ do
   es' <- renderDExpr a selection
   return $ es ++ es'
 
-exprWidget :: MonadWidget t m => Expr X -> m ()
-exprWidget e = do
+exprWidget ::
+  (Reflex t, MonadWidget t m, IsElement (RawElement d)) =>
+  Expr X -> Element EventResult d t -> m ()
+exprWidget e bodyEl = do
   rec
     eDyn <- foldDyn ($) e $ mergeWith (.) [eq]
-    let body = widgetBody d spc selection <$> eDyn
-    (d, clickedE) <- elAttr' "div" ("tabindex" =: "1") (dyn body)
+    let body = widgetBody spc selection <$> eDyn
+    clickedE <- el "div" (dyn body)
     clicked <- switchPromptly never clickedE
-    selection <- foldDyn ($) Nothing $ mergeWith (.) [clicked, spc]
-    let kp = domEvent Keydown d
+    selection <- foldDyn ($) Nothing $ mergeWith (.) [clicked, clickedW', spc]
+    clickedW <- ownEvent Click bodyEl
+    let clickedW' = const Nothing <$ clickedW
+    let kp = domEvent Keydown bodyEl
         spc = fmap parent <$ ffilter (\n -> keyCodeLookup n == Space) kp
         eqKey = ffilter (\n -> keyCodeLookup n == Equals) kp
         eq = fforMaybe (tagPromptlyDyn selection eqKey) $ fmap (\sel -> path sel%~normalize)
   return ()
 
-widgetBody d spc selection e = do
+widgetBody spc selection e = do
   es <- renderDExpr (displayExpr e) (demux selection)
   return $ const . Just <$> leftmost es
 

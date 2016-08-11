@@ -2,7 +2,7 @@
 module ProofCas.Hovering where
 
 import Reflex.Dom
-import GHCJS.DOM.Types (IsElement)
+import GHCJS.DOM.Types (IsElement, IsEvent)
 import GHCJS.DOM.EventM (eventTarget, eventCurrentTarget)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -11,13 +11,19 @@ import qualified Data.Text as T
 import Data.Monoid
 import Data.Bool
 
+eventWithIsOwn ::
+  (Reflex t, MonadWidget t m,
+   IsElement (RawElement d), IsEvent (EventType en)) =>
+  EventName en -> Element EventResult d t -> m (Event t Bool)
 eventWithIsOwn en el =
   wrapDomEvent (_element_raw el) (onEventName en)
     (liftA2 (==) eventTarget eventCurrentTarget)
 
-ownEvent en el = do
-  ev <- eventWithIsOwn en el
-  return $ ffilter id ev
+ownEvent ::
+  (Reflex t, MonadWidget t m,
+   IsElement (RawElement d), IsEvent (EventType en)) =>
+  EventName en -> Element EventResult d t -> m (Event t Bool)
+ownEvent en el = ffilter id <$> eventWithIsOwn en el
 
 hovering el leave over = do
   rec
