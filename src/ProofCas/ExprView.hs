@@ -32,21 +32,21 @@ wrapDomEvent' el en a = do
   e <- wrapDomEvent el (onEventName en) a
   performEvent_ (return () <$ e)
 
-exprSpan :: (Reflex t, MonadWidget t m) => T.Text -> Demux t Path -> m [Event t Path] -> Path -> m [Event t Path]
+exprSpan :: (Reflex t, MonadWidget t m) => T.Text -> Demux t (Maybe Path) -> m [Event t Path] -> Path -> m [Event t Path]
 exprSpan exprType selection contents pa = do
   rec
     (span, es) <- elDynAttr' "span" attrs contents
 
-    hovE <- hovering span Mouseleave Mouseover
+    hov <- holdDyn False =<< hovering span Mouseleave Mouseover
     dragHovE <- hovering span Dragleave Dragenter
     dropE <- wrapDomEvent (_element_raw span) (onEventName Drop) (False <$ stopPropagation)
-    let selectedE = updated (demuxed selection pa)
+    let selected = demuxed selection (Just pa)
 
-    let dragHovE' = leftmost [dropE, dragHovE]
-    classes <- classesFor $
-      "expr-mouseover" =: hovE <>
-      "expr-dragenter" =: dragHovE' <>
-      "expr-selected" =: selectedE
+    dragHov <- holdDyn False $ leftmost [dropE, dragHovE]
+    let classes = classesFor $
+         "expr-mouseover" =: hov <>
+         "expr-dragenter" =: dragHov <>
+         "expr-selected" =: selected
 
     let plainAttrs = constDyn $ "draggable" =: "true"
         attrs      = setClasses classes plainAttrs
@@ -66,13 +66,13 @@ binder selection (v, d) = do
   return es
 binders selection = sequenceA . intersperse ([] <$ textSpan " ") . map (binder selection)
 
-renderDExpr :: MonadWidget t m => DisplayExpr -> Demux t Path -> m [Event t Path]
+renderDExpr :: MonadWidget t m => DisplayExpr -> Demux t (Maybe Path) -> m [Event t Path]
 renderDExpr (NoPar pa e) selection = renderDEL e selection pa
 renderDExpr (Par   pa e) selection = do
   textSpan "("
   renderDEL e selection pa <* textSpan ")"
 
-renderDEL :: MonadWidget t m => DELevel DisplayExpr -> Demux t Path -> Path -> m [Event t Path]
+renderDEL :: MonadWidget t m => DELevel DisplayExpr -> Demux t (Maybe Path) -> Path -> m [Event t Path]
 renderDEL DStar    selection = exprSpan "star" selection $ [] <$ textSpan "*"
 renderDEL DBox     selection = exprSpan "box" selection $ [] <$ textSpan "\9633"
 renderDEL (DVar v) selection = exprSpan "var" selection $ [] <$ textSpan v
@@ -107,14 +107,14 @@ exprWidget e = do
     let body = widgetBody d spc selection <$> eDyn
     (d, clickedE) <- elAttr' "div" ("tabindex" =: "1") (dyn body)
     clicked <- switchPromptly never clickedE
-    selection <- foldDyn ($) [] $ mergeWith (.) [clicked, spc]
+    selection <- foldDyn ($) Nothing $ mergeWith (.) [clicked, spc]
     let kp = domEvent Keydown d
-        spc = parent <$ ffilter (\n -> keyCodeLookup n == Space) kp
+        spc = fmap parent <$ ffilter (\n -> keyCodeLookup n == Space) kp
         eqKey = ffilter (\n -> keyCodeLookup n == Equals) kp
-        eq = ffor (tagPromptlyDyn selection eqKey) $ \sel -> path sel%~normalize
+        eq = fforMaybe (tagPromptlyDyn selection eqKey) $ fmap (\sel -> path sel%~normalize)
   return ()
 
 widgetBody d spc selection e = do
   es <- renderDExpr (displayExpr e) (demux selection)
-  return $ const <$> leftmost es
+  return $ const . Just <$> leftmost es
 

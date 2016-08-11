@@ -28,12 +28,9 @@ hovering el leave over = do
   return shouldHighlight
 
 classesFor ::
-  (Reflex t, MonadWidget t m) =>
-  Map T.Text (Event t Bool) ->
-  m (Dynamic t T.Text)
-classesFor events = do
-  (fmap . fmap) (T.unwords . map fst . filter snd . Map.assocs) $
-    foldDyn (<>) Map.empty (mergeMap events)
+  Reflex t => Map T.Text (Dynamic t Bool) -> Dynamic t T.Text
+classesFor =
+  fmap (T.unwords . map fst . filter snd . Map.assocs) . sequenceA
 
 setClasses ::
   Reflex t =>
