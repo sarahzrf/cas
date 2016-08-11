@@ -109,8 +109,9 @@ exprWidget e = do
     clicked <- switchPromptly never clickedE
     selection <- foldDyn ($) [] $ mergeWith (.) [clicked, spc]
     let kp = domEvent Keydown d
-        spc = parent <$ ffilter (==32) kp
-        eq = ffor (tagPromptlyDyn selection (ffilter (==61) kp)) $ \sel -> path sel%~normalize
+        spc = parent <$ ffilter (\n -> keyCodeLookup n == Space) kp
+        eqKey = ffilter (\n -> keyCodeLookup n == Equals) kp
+        eq = ffor (tagPromptlyDyn selection eqKey) $ \sel -> path sel%~normalize
   return ()
 
 widgetBody d spc selection e = do
