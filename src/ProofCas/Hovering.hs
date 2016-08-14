@@ -19,12 +19,6 @@ eventWithIsOwn en el =
   wrapDomEvent (_element_raw el) (onEventName en)
     (liftA2 (==) eventTarget eventCurrentTarget)
 
-ownEvent ::
-  (Reflex t, MonadWidget t m,
-   IsElement (RawElement d), IsEvent (EventType en)) =>
-  EventName en -> Element EventResult d t -> m (Event t Bool)
-ownEvent en el = ffilter id <$> eventWithIsOwn en el
-
 hovering el leave over = do
   rec
     evL <- eventWithIsOwn leave el
