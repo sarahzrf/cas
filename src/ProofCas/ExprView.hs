@@ -14,6 +14,7 @@ import Data.List
 import qualified Data.Text as T
 import Morte.Core hiding (Path)
 import Control.Lens
+import Control.Monad
 import ProofCas.Hovering
 import ProofCas.Pretty
 import ProofCas.Paths
@@ -59,12 +60,11 @@ exprSpan exprType selection contents pa = do
 textSpan :: MonadWidget t m => T.Text -> m ()
 textSpan content = elClass "span" "text" $ text content
 
-binder selection (v, d) = do
+binder selection v d = do
   textSpan $ T.concat ["(", v, " : "]
   es <- renderDExpr d selection
   textSpan ")"
   return es
-binders selection = sequenceA . intersperse ([] <$ textSpan " ") . map (binder selection)
 
 renderDExpr :: MonadWidget t m => DisplayExpr -> Demux t (Maybe Path) -> m [Event t Path]
 renderDExpr (NoPar pa e) selection = renderDEL e selection pa
@@ -77,16 +77,16 @@ renderDEL DStar    selection = exprSpan "star" selection $ [] <$ textSpan "*"
 renderDEL DBox     selection = exprSpan "box" selection $ [] <$ textSpan "\9633"
 renderDEL (DVar v) selection = exprSpan "var" selection $ [] <$ textSpan v
 
-renderDEL (DLam p b) selection = exprSpan "lam" selection $ do
-  textSpan "\955"
-  es <- concat <$> binders selection p
-  textSpan " \8594 "
+renderDEL (DLam f l v d b) selection = exprSpan "lam" selection $ do
+  when f $ textSpan "\955"
+  es <- binder selection v d
+  if l then textSpan " \8594 " else textSpan " "
   es' <- renderDExpr b selection
   return $ es ++ es'
-renderDEL (DPi p c) selection = exprSpan "pi" selection $ do
-  textSpan "\8704"
-  es <- concat <$> binders selection p
-  textSpan ", "
+renderDEL (DPi f l v d c) selection = exprSpan "pi" selection $ do
+  when f $ textSpan "\8704"
+  es <- binder selection v d
+  if l then textSpan ", " else textSpan " "
   es' <- renderDExpr c selection
   return $ es ++ es'
 renderDEL (Arr d c) selection = exprSpan "arr" selection $ do
