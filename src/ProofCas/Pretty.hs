@@ -52,10 +52,11 @@ toDE' sp cur e = NoPar' (StPath sp cur) $ case e of
   Const Box  -> DBox
   Var v      -> DVar . TL.toStrict . pretty $ v
   Lam v d b  -> DLam True True (TL.toStrict v) (toDE' sp (LamDom:cur) d) (toDE' sp (LamBody:cur) b)
-  Pi "_" d c -> Arr (toDE' sp (PiDom:cur) d) (toDE' sp (PiCod:cur) c)
-  Pi v d c   -> DPi True True (TL.toStrict v) (toDE' sp (PiDom:cur) d) (toDE' sp (PiCod:cur) c)
   App f a    -> DApp (toDE' sp (AppFunc:cur) f) (toDE' sp (AppArg:cur) a)
   Embed x    -> absurd x
+  Pi v d c
+    | freeIn (V v 0) c -> DPi True True (TL.toStrict v) (toDE' sp (PiDom:cur) d) (toDE' sp (PiCod:cur) c)
+    | otherwise -> Arr (toDE' sp (PiDom:cur) d) (toDE' sp (PiCod:cur) c)
 
 markBinders :: DisplayExpr' -> DisplayExpr'
 markBinders (NoPar' pa e) = NoPar' pa (go e)
