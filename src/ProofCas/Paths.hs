@@ -19,6 +19,7 @@ parent (s:ss) = ss
 ancestor :: Path -> Path -> Bool
 ancestor = isSuffixOf
 
+
 step :: Applicative f => PathStep ->
   (Expr a -> f (Expr a)) -> Expr a -> f (Expr a)
 step LamDom  m (Lam v d b) = (\d -> Lam v d b) <$> m d
@@ -33,7 +34,8 @@ path :: Applicative f => Path ->
   (Expr a -> f (Expr a)) -> Expr a -> f (Expr a)
 path = foldl' (.) id . reverse . map step
 
--- not actually very useful - just for demo purposes!
+
+-- not actually very useful - just for interface demo purposes!
 swap :: Path -> Path -> Expr a -> Expr a
 swap pa pa' = ap fromMaybe $ execStateT $ do
   guard $ not (pa `ancestor` pa' || pa' `ancestor` pa)

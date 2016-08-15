@@ -5,7 +5,6 @@ module ProofCas.WriterInstances where
 
 import Reflex.Dom
 import Control.Monad.Writer
-import Control.Monad.State
 
 instance (Monoid w, HasWebView m) => HasWebView (WriterT w m) where
   type WebViewPhantom (WriterT w m) = WebViewPhantom m
@@ -28,10 +27,10 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
   textNode = liftTextNode
   element elementTag cfg = WriterT . fmap reassoc . element elementTag (fixECfg cfg) . runWriterT
     where reassoc (el, (a, w)) = ((el, a), w)
-  placeholder = lift . placeholder . fixPCfg
-  inputElement = lift . inputElement . fixIECfg
-  textAreaElement = lift . textAreaElement . fixTAECfg
-  placeRawElement = lift . placeRawElement
+  placeholder      = lift . placeholder . fixPCfg
+  inputElement     = lift . inputElement . fixIECfg
+  textAreaElement  = lift . textAreaElement . fixTAECfg
+  placeRawElement  = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e . fixRECfg
 
 instance (Deletable t m, Reflex t, Monoid w, MonadHold t m, MonadFix m) => Deletable t (WriterT w m) where
@@ -40,7 +39,7 @@ instance (Deletable t m, Reflex t, Monoid w, MonadHold t m, MonadFix m) => Delet
 instance (Monoid w, PerformEvent t m) => PerformEvent t (WriterT w m) where
   type Performable (WriterT w m) = Performable m
   performEvent_ = lift . performEvent_
-  performEvent = lift . performEvent
+  performEvent  = lift . performEvent
 
 instance (Monoid w, TriggerEvent t m) => TriggerEvent t (WriterT w m) where
   newTriggerEvent = lift newTriggerEvent

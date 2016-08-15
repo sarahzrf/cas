@@ -1,8 +1,8 @@
 {-# LANGUAGE CPP #-}
 module ProofCas.SetDrag where
 
-import GHCJS.DOM.EventM (EventM, preventDefault, stopPropagation, event)
-import GHCJS.DOM.Types (IsMouseEvent, IsElement, IsEvent)
+import GHCJS.DOM.EventM (EventM, event)
+import GHCJS.DOM.Types (IsMouseEvent)
 #ifdef __GHCJS__
 import GHCJS.DOM.MouseEvent (getDataTransfer)
 import GHCJS.DOM.DataTransfer

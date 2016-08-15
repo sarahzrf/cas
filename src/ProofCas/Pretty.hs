@@ -5,6 +5,7 @@ module ProofCas.Pretty where
 import Morte.Core hiding (Path)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
+import Data.Bool
 import ProofCas.Paths
 
 data DELevel a
@@ -18,6 +19,7 @@ data DELevel a
   deriving Functor
 data DisplayExpr' = NoPar' Path (DELevel DisplayExpr')
 data DisplayExpr = NoPar Path (DELevel DisplayExpr) | Par Path (DELevel DisplayExpr)
+
 
 displayExpr :: Expr X -> DisplayExpr
 displayExpr = parenthesize . markBinders . toDE' []
@@ -64,7 +66,7 @@ weakLeft = \case
   (DApp _ _) -> True
   _ -> False
 
-mpar = \case True -> Par; False -> NoPar
+mpar = bool NoPar Par
 
 parenthesize :: DisplayExpr' -> DisplayExpr
 parenthesize (NoPar' pa e) = NoPar pa (go e)
