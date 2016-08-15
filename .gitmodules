@@ -1,0 +1,3 @@
+[submodule "Haskell-Morte-Library"]
+	path = Haskell-Morte-Library
+	url = https://github.com/benzrf/Haskell-Morte-Library
