@@ -5,32 +5,25 @@ module Main where
 import Reflex.Dom
 import Data.FileEmbed
 import Morte.Core
-import Morte.Parser
+import Morte.Context
 import Text.Read
 import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
 import Control.Monad.Trans
 import GHCJS.DOM.Document
-import ProofCas.ExprView
+import ProofCas.Proofs
+import ProofCas.Interface
 
 deriving instance Read Const
 deriving instance Read Var
 deriving instance Read a => Read (Expr a)
+deriving instance Read a => Read (Context a)
+deriving instance Read Status
 instance Read X where
   readsPrec _ _ = []
 
-fromCode' bodyEl c = case readMaybe (T.unpack c) of
+fromCode bodyEl c = case readMaybe (T.unpack c) of
   Nothing   -> text "No read."
-  Just expr -> exprWidget expr bodyEl
-
-
-clearEmbeds :: Expr Path -> Maybe (Expr X)
-clearEmbeds = traverse (const Nothing)
-
-fromCode bodyEl c = case clearEmbeds <$> exprFromText (TL.pack (T.unpack c)) of
-  Left err          -> text (T.pack (show err))
-  Right Nothing     -> text "You can't import stuff here."
-  Right (Just expr) -> exprWidget expr bodyEl
+  Just expr -> proofCasWidget bodyEl expr
 
 
 main :: IO ()
@@ -40,6 +33,6 @@ main = mainWidgetWithCss $(embedFile "expr.css") $ do
   document <- Control.Monad.Trans.lift askDocument
   Just rawBody <- getBody document
   bodyEl <- wrapRawElement rawBody def
-  widgetHold (return ()) $ fromCode' bodyEl <$> newCode
+  widgetHold (return ()) $ fromCode bodyEl <$> newCode
   return ()
 

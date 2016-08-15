@@ -1,46 +1,78 @@
+{-# LANGUAGE TemplateHaskell #-}
 module ProofCas.Paths where
 
 import Morte.Core hiding (Path)
 import Control.Lens
 import Control.Monad.State
+import qualified Data.Text.Lazy as TL
 import Data.List
 import Data.Maybe
+import ProofCas.Proofs
+import ProofCas.Contexts
 
-data PathStep =
+data EPathStep =
   LamDom | LamBody | PiDom | PiCod | AppFunc | AppArg
   deriving (Eq, Ord, Show)
 
-type Path = [PathStep]
+type EPath = [EPathStep]
 
-parent :: Path -> Path
+data StPart =
+  Assm TL.Text Int | Thm | Prf
+  deriving (Eq, Ord, Show)
+
+data StPath =
+  StPath {
+    _statusPart :: StPart,
+    _epathPart  :: EPath
+  } deriving (Eq, Ord, Show)
+
+makeLenses ''StPath
+
+
+parent :: EPath -> EPath
 parent [] = []
 parent (s:ss) = ss
 
-ancestor :: Path -> Path -> Bool
+ancestor :: EPath -> EPath -> Bool
 ancestor = isSuffixOf
 
 
-step :: Applicative f => PathStep ->
+estep :: Applicative f => EPathStep ->
   (Expr a -> f (Expr a)) -> Expr a -> f (Expr a)
-step LamDom  m (Lam v d b) = (\d -> Lam v d b) <$> m d
-step LamBody m (Lam v d b) = (\b -> Lam v d b) <$> m b
-step PiDom   m (Pi  v d c) = (\d -> Pi  v d c) <$> m d
-step PiCod   m (Pi  v d c) = (\c -> Pi  v d c) <$> m c
-step AppFunc m (App f a)   = (\f -> App f a)   <$> m f
-step AppArg  m (App f a)   = (\a -> App f a)   <$> m a
-step _ _ e = pure e
+estep LamDom  m (Lam v d b) = (\d -> Lam v d b) <$> m d
+estep LamBody m (Lam v d b) = (\b -> Lam v d b) <$> m b
+estep PiDom   m (Pi  v d c) = (\d -> Pi  v d c) <$> m d
+estep PiCod   m (Pi  v d c) = (\c -> Pi  v d c) <$> m c
+estep AppFunc m (App f a)   = (\f -> App f a)   <$> m f
+estep AppArg  m (App f a)   = (\a -> App f a)   <$> m a
+estep _ _ e = pure e
 
-path :: Applicative f => Path ->
+epath ::
+  Applicative f => EPath ->
   (Expr a -> f (Expr a)) -> Expr a -> f (Expr a)
-path = foldl' (.) id . reverse . map step
+epath = foldl' (.) id . reverse . map estep
+
+
+stpart ::
+  Applicative f => StPart ->
+  (Expr X -> f (Expr X)) -> Status -> f Status
+stpart (Assm v occ) = statusCtx.numbered.aIx (v, occ)
+stpart Thm =          statusTheorem
+stpart Prf =          statusProof
+
+stpath ::
+  Applicative f => StPath ->
+  (Expr X -> f (Expr X)) -> Status -> f Status
+stpath (StPath stP epaP) = stpart stP.epath epaP
 
 
 -- not actually very useful - just for interface demo purposes!
-swap :: Path -> Path -> Expr a -> Expr a
-swap pa pa' = ap fromMaybe $ execStateT $ do
-  guard $ not (pa `ancestor` pa' || pa' `ancestor` pa)
-  a <- preuse (path pa) >>= lift
-  b <- preuse (path pa') >>= lift
-  path pa  .= b
-  path pa' .= a
+swap :: StPath -> StPath -> Status -> Status
+swap stpa stpa' = ap fromMaybe $ execStateT $ do
+  guard $ not (_epathPart stpa  `ancestor` _epathPart stpa' ||
+               _epathPart stpa' `ancestor` _epathPart stpa)
+  a <- preuse (stpath stpa)  >>= lift
+  b <- preuse (stpath stpa') >>= lift
+  stpath stpa  .= b
+  stpath stpa' .= a
 

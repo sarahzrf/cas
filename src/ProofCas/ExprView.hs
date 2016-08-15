@@ -7,8 +7,6 @@ import GHCJS.DOM.Types (IsElement, IsEvent)
 import Control.Monad.Reader
 import Control.Monad.Writer
 import qualified Data.Text as T
-import Morte.Core hiding (Path)
-import Control.Lens
 import ProofCas.Hovering
 import ProofCas.Pretty
 import ProofCas.Paths
@@ -31,34 +29,37 @@ ownEvent en el = ffilter id <$> eventWithIsOwn en el
 
 data ExprEvents t =
   ExprEvents {
-    exprClick :: Event t Path,
-    exprDrag  :: Event t Path,
-    exprDrop  :: Event t Path
+    exprClick :: Event t StPath,
+    exprDrag  :: Event t StPath,
+    exprDrop  :: Event t StPath
   }
 
 data RenderCtx t =
   RenderCtx {
-    selection :: Demux t (Maybe Path)
+    selection :: Demux t (Maybe StPath)
   }
 
 type Render t m = WriterT [ExprEvents t] (ReaderT (RenderCtx t) m) ()
 
 exprEvents ::
-  Reflex t => Path -> Event t a -> Event t b -> Event t c -> ExprEvents t
-exprEvents pa clickE dragE dropE =
-  ExprEvents (pa <$ clickE) (pa <$ dragE) (pa <$ dropE)
+  Reflex t => StPath -> Event t a -> Event t b -> Event t c -> ExprEvents t
+exprEvents stpa clickE dragE dropE =
+  ExprEvents (stpa <$ clickE) (stpa <$ dragE) (stpa <$ dropE)
+
+runRender :: Monad m => RenderCtx t -> Render t m -> m [ExprEvents t]
+runRender ctx = flip runReaderT ctx . execWriterT
 
 
 exprSpan ::
-  (Reflex t, MonadWidget t m) => T.Text -> Render t m -> Path -> Render t m
-exprSpan exprType contents pa = do
+  (Reflex t, MonadWidget t m) => T.Text -> Render t m -> StPath -> Render t m
+exprSpan exprType contents stpa = do
   selection <- asks selection
   rec
     hov <- holdDyn False =<< hovering span Mouseleave Mouseover
     dragHovE <- hovering span Dragleave Dragenter
     dropE <- wrapDomEvent (_element_raw span) (onEventName Drop) (False <$ stopPropagation)
     dragHov <- holdDyn False $ leftmost [dropE, dragHovE]
-    let selected = demuxed selection (Just pa)
+    let selected = demuxed selection (Just stpa)
 
     let classes = classesFor $
          "expr-mouseover" =: hov <>
@@ -74,7 +75,7 @@ exprSpan exprType contents pa = do
   dragE <- wrapDomEvent (_element_raw span) (onEventName Dragstart)
     (setCurrentDragData "dummy" "dummy" >> stopPropagation)
   clickedE <- ownEvent Click span
-  let eEvs = exprEvents pa clickedE dragE dropE
+  let eEvs = exprEvents stpa clickedE dragE dropE
   tell [eEvs]
 
 textSpan :: MonadWidget t m => T.Text -> m ()
@@ -85,10 +86,10 @@ binder v d =
   textSpan (T.concat ["(", v, " : "]) *> renderDExpr d <* textSpan ")"
 
 renderDExpr :: MonadWidget t m => DisplayExpr -> Render t m
-renderDExpr (NoPar pa e) = renderDEL e pa
-renderDExpr (Par   pa e) = textSpan "(" *> renderDEL e pa <* textSpan ")"
+renderDExpr (NoPar stpa e) = renderDEL e stpa
+renderDExpr (Par   stpa e) = textSpan "(" *> renderDEL e stpa <* textSpan ")"
 
-renderDEL :: MonadWidget t m => DELevel DisplayExpr -> Path -> Render t m
+renderDEL :: MonadWidget t m => DELevel DisplayExpr -> StPath -> Render t m
 renderDEL DStar    = exprSpan "star" $ textSpan "*"
 renderDEL DBox     = exprSpan "box" $ textSpan "\9633"
 renderDEL (DVar v) = exprSpan "var" $ textSpan v
@@ -111,36 +112,4 @@ renderDEL (DApp f a) = exprSpan "app" $ do
   renderDExpr f
   textSpan " "
   renderDExpr a
-
-
-fromUpdates :: MonadWidget t m => a -> [Event t (a -> a)] -> m (Dynamic t a)
-fromUpdates initial updaters = foldDyn ($) initial (mergeWith (.) updaters)
-
-exprWidget ::
-  (MonadWidget t m, IsElement (RawElement d)) =>
-  Expr X -> Element EventResult d t -> m ()
-exprWidget e bodyEl = do
-  rec
-    let exprEvE which = switchPromptly never $ leftmost . map which <$> exprEvsE
-    clickedE <- exprEvE exprClick
-    draggedE <- exprEvE exprDrag
-    droppedE <- exprEvE exprDrop
-    clickedW <- ownEvent Click bodyEl
-    let keybind k = ffilter (\n -> keyCodeLookup n == k) (domEvent Keydown bodyEl)
-
-    let sel   = const . Just <$> clickedE
-        desel = const Nothing <$ clickedW
-        up    = fmap parent <$ keybind Space
-    selection <- fromUpdates Nothing [sel, desel, up]
-
-    dragging <- holdDyn [] draggedE
-    let -- this will break if you drop other random shit from outside... hmm
-        drop  = uncurry swap <$> dragging `attachPromptlyDyn` droppedE
-        norm  = fmap (\sel -> path sel%~normalize) `fmapMaybe` tagPromptlyDyn selection (keybind Equals)
-    eDyn <- fromUpdates e [norm, drop]
-
-    let ctx = RenderCtx (demux selection)
-        widgetBody = flip runReaderT ctx . execWriterT . renderDExpr . displayExpr
-    exprEvsE <- el "div" $ dyn (widgetBody <$> eDyn)
-  return ()
 
