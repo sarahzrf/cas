@@ -24,7 +24,7 @@ executable proofcas
                        ghcjs-dom,
                        file-embed,
                        containers,
-                       morte,
+                       SimpleFP-v2,
                        text,
                        lens,
                        mtl

@@ -1,76 +1,107 @@
 {-# LANGUAGE TemplateHaskell #-}
 module ProofCas.Paths where
 
-import Morte.Core hiding (Path)
+import DependentImplicit.Core.Term
+import Utils.ABT
+import Utils.Vars
+import Utils.Telescope
 import Control.Lens
 import Control.Monad.State
-import qualified Data.Text.Lazy as TL
 import Data.List
 import Data.Maybe
 import ProofCas.Proofs
-import ProofCas.Contexts
 
-data EPathStep =
-  LamDom | LamBody | PiDom | PiCod | AppFunc | AppArg
-  deriving (Eq, Ord, Show)
+type TPathStep = TermParenLoc
 
-type EPath = [EPathStep]
+type TPath = [TPathStep]
 
 data StPart =
-  Assm TL.Text Int | Thm | Prf
+  Assm String | Thm | Prf
   deriving (Eq, Ord, Show)
 
 data StPath =
   StPath {
     _statusPart :: StPart,
-    _epathPart  :: EPath
-  } deriving (Eq, Ord, Show)
+    _tpathPart  :: TPath
+  } deriving (Eq, Ord)
 
 makeLenses ''StPath
 
 
-parent :: EPath -> EPath
+aIx :: (Eq k, Applicative f) => k -> (a -> f a) -> [(k, a)] -> f [(k, a)]
+aIx k m [] = pure []
+aIx k m ((k', a):kas)
+  | k == k' = (\a' -> (k', a'):kas) <$> m a
+  | otherwise = ((k', a):) <$> aIx k m kas
+
+
+parent :: TPath -> TPath
 parent [] = []
 parent (s:ss) = ss
 
-ancestor :: EPath -> EPath -> Bool
+ancestor :: TPath -> TPath -> Bool
 ancestor = isSuffixOf
 
 
-estep :: Applicative f => EPathStep ->
-  (Expr a -> f (Expr a)) -> Expr a -> f (Expr a)
-estep LamDom  m (Lam v d b) = (\d -> Lam v d b) <$> m d
-estep LamBody m (Lam v d b) = (\b -> Lam v d b) <$> m b
-estep PiDom   m (Pi  v d c) = (\d -> Pi  v d c) <$> m d
-estep PiCod   m (Pi  v d c) = (\c -> Pi  v d c) <$> m c
-estep AppFunc m (App f a)   = (\f -> App f a)   <$> m f
-estep AppArg  m (App f a)   = (\a -> App f a)   <$> m a
-estep _ _ e = pure e
+-- christ this is ugly
+tstep' :: Applicative f => TPathStep ->
+  (Scope TermF -> f (Scope TermF)) ->
+  TermF (Scope TermF) -> f (TermF (Scope TermF))
+tstep' s m t = case (s, t) of
+  (AnnTerm,      Ann  t y)   -> (\t -> Ann  t y)   <$> m t
+  (AnnType,      Ann  t y)   -> (\y -> Ann  t y)   <$> m y
+  (FunArg,       Fun  p d c) -> (\d -> Fun  p d c) <$> m d
+  (FunRet,       Fun  p d c) -> (\c -> Fun  p d c) <$> m c
+  (LamBody,      Lam  p b)   -> (\b -> Lam  p b)   <$> m b
+  (AppFun,       App  p f a) -> (\f -> App  p f a) <$> m f
+  (AppArg _,     App  p f a) -> (\a -> App  p f a) <$> m a
+  (ConArg _ n,   Con  i a)   -> (\a -> Con  i a)   <$> ix n (_2 m) a
+  (CaseArg n,    Case a o c) -> (\a -> Case a o c) <$> ix n m a
+  (MotiveArg n,  Case a o c) -> (\o -> Case a o c) <$> args (ix n m) o
+  (MotiveRet,    Case a o c) -> (\o -> Case a o c) <$> ret m o
+  (ClauseBody n, Case a o c) -> (\c -> Case a o c) <$> ix n (body m) c
 
-epath ::
-  Applicative f => EPath ->
-  (Expr a -> f (Expr a)) -> Expr a -> f (Expr a)
-epath = foldl' (.) id . reverse . map estep
+  (AssertionPatArg, _) ->
+    error "You shouldn't even be using assertion patterns!"
+  (_, _) -> pure t
+  where args m (CaseMotive (BindingTelescope a r)) = (\a -> CaseMotive (BindingTelescope a r)) <$> m a
+        ret m (CaseMotive (BindingTelescope a r)) = (\r -> CaseMotive (BindingTelescope a r)) <$> m r
+        body m (Clause p b) = (\b -> Clause p b) <$> m b
+
+tstep :: Applicative f => TPathStep ->
+  (Term -> f Term) -> Term -> f Term
+tstep s m (Var v) = pure (Var v)
+tstep s m (In t) = In <$> tstep' s m' t
+  where m' c@Scope{body=t} = (\t -> c{body=t}) <$> m t
+
+tpath ::
+  Applicative f => TPath ->
+  (Term -> f Term) -> Term -> f Term
+tpath = foldl' (.) id . reverse . map tstep
+
+
+(->:) :: StPath -> TPathStep -> StPath
+StPath stPart tpathPart->:s = StPath stPart (s:tpathPart)
 
 
 stpart ::
   Applicative f => StPart ->
-  (Expr X -> f (Expr X)) -> Status -> f Status
-stpart (Assm v occ) = statusCtx.numbered.aIx (v, occ)
-stpart Thm =          statusTheorem
-stpart Prf =          statusProof
+  (Term -> f Term) -> Status -> f Status
+stpart (Assm v) = statusContext.aIx (FreeVar v)
+stpart Thm      = statusTheorem
+stpart Prf      = statusProof
 
 stpath ::
   Applicative f => StPath ->
-  (Expr X -> f (Expr X)) -> Status -> f Status
-stpath (StPath stP epaP) = stpart stP.epath epaP
+  (Term -> f Term) -> Status -> f Status
+stpath (StPath stP epaP) = stpart stP.tpath epaP
 
 
 -- not actually very useful - just for interface demo purposes!
 swap :: StPath -> StPath -> Status -> Status
 swap stpa stpa' = ap fromMaybe $ execStateT $ do
-  guard $ not (_epathPart stpa  `ancestor` _epathPart stpa' ||
-               _epathPart stpa' `ancestor` _epathPart stpa)
+  guard $ not (_tpathPart stpa  `ancestor` _tpathPart stpa' ||
+               _tpathPart stpa' `ancestor` _tpathPart stpa)
   a <- preuse (stpath stpa)  >>= lift
   b <- preuse (stpath stpa') >>= lift
   stpath stpa  .= b

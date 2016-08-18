@@ -7,18 +7,18 @@ body {
     font-size: 48pt;
 }
 
-.expr {
+.term {
     text-align: center;
     vertical-align: middle;
     display: inline-block;
 }
-.expr-mouseover {
+.term-mouseover {
     outline: dashed 3px rgba(100,100,255,.5);
 }
-.expr-dragenter {
+.term-dragenter {
     outline: dashed 3px rgba(255,100,100,.5);
 }
-.expr-selected, .expr-mouseover.expr-selected {
+.term-selected, .term-mouseover.term-selected {
     outline: dashed 3px rgba(50,50,255,.75);
 }
 
@@ -27,7 +27,7 @@ body {
     vertical-align: middle;
     display: inline-block;
 }
-.expr hr {
+.term hr {
     margin: 0px;
 }
 

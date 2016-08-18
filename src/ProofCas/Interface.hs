@@ -3,16 +3,19 @@ module ProofCas.Interface where
 
 import Reflex.Dom
 import GHCJS.DOM.Types (IsElement)
-import Morte.Core
+import Utils.Vars
+import DependentImplicit.Core.Term
 import Control.Lens
 import Control.Monad
-import qualified Data.Text.Lazy as TL
+import qualified Data.Text as T
 import Data.Monoid
 import ProofCas.Proofs
-import ProofCas.Contexts
 import ProofCas.Paths
-import ProofCas.Pretty
-import ProofCas.ExprView
+import ProofCas.TermView
+
+evalAt :: StPath -> Status -> Status
+evalAt sel st = either (const st) id $ st & stpath sel (evalIn st)
+
 
 fromUpdates :: MonadWidget t m => a -> [Event t (a -> a)] -> m (Dynamic t a)
 fromUpdates initial updaters = foldDyn ($) initial (mergeWith (.) updaters)
@@ -22,32 +25,31 @@ proofCasWidget ::
   Element EventResult d t -> Status -> m ()
 proofCasWidget bodyEl initialSt = do
   rec
-    let exprEvE which = switchPromptly never $ leftmost . map which <$> exprEvsE
-    clickedE <- exprEvE exprClick
-    draggedE <- exprEvE exprDrag
-    droppedE <- exprEvE exprDrop
+    let termEvE which = switchPromptly never $ leftmost . map which <$> termEvsE
+    clickedE <- termEvE termClick
+    draggedE <- termEvE termDrag
+    droppedE <- termEvE termDrop
     clickedW <- ownEvent Click bodyEl
     let keybind k = ffilter (\n -> keyCodeLookup n == k) (domEvent Keydown bodyEl)
 
     let sel   = const . Just <$> clickedE
         desel = const Nothing <$ clickedW
-        up    = fmap (epathPart%~parent) <$ keybind Space
+        up    = fmap (tpathPart%~parent) <$ keybind Space
     selection <- fromUpdates Nothing [sel, desel, up]
 
     dragging <- holdDyn (StPath Thm []) draggedE
     let -- this will break if you drop other random shit from outside... hmm
         drop  = uncurry swap <$> dragging `attachPromptlyDyn` droppedE
-        norm  = fmap (\sel -> stpath sel%~normalize) `fmapMaybe` tagPromptlyDyn selection (keybind Equals)
+        norm  = fmap evalAt `fmapMaybe` tagPromptlyDyn selection (keybind Equals)
     stDyn <- fromUpdates initialSt [norm, drop]
 
     let ctx = RenderCtx (demux selection)
-    exprEvsE <- el "div" . dyn . ffor stDyn $ \st -> runRender ctx $ do
-      let dst = displayStatus st
-      forM (dst^.dstatusCtx.numbered) $ \((v, occ), de) -> do
-        textSpan $ TL.toStrict v <> " : "
-        renderDExpr de
+    termEvsE <- el "div" . dyn . ffor stDyn $ \st -> runRender ctx $ do
+      forM (st^.statusContext) $ \(FreeVar v, de) -> do
+        textSpan $ T.pack v <> " : "
+        renderTerm de (StPath (Assm v) [])
         el "br" $ return ()
       el "hr" $ return ()
-      renderDExpr (_dstatusTheorem dst)
+      renderTerm (_statusTheorem st) (StPath Thm [])
   return ()
 

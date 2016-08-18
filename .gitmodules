@@ -1,3 +1,3 @@
-[submodule "Haskell-Morte-Library"]
-	path = Haskell-Morte-Library
-	url = https://github.com/benzrf/Haskell-Morte-Library
+[submodule "SimpleFP-v2"]
+	path = SimpleFP-v2
+	url = git://github.com/benzrf/SimpleFP-v2.git

@@ -1,5 +1,5 @@
 { reflex-platform, ... }: reflex-platform.ghc.override {
   overrides = self: super: {
-    morte = self.callPackage ./Haskell-Morte-Library {};
+    SimpleFP-v2 = self.callPackage ./SimpleFP-v2 {};
   };
 }
