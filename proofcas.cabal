@@ -26,6 +26,7 @@ executable proofcas
                        containers,
                        SimpleFP-v2,
                        text,
+                       bytestring,
                        lens,
                        mtl
   hs-source-dirs:      src
