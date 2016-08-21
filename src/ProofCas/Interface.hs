@@ -9,9 +9,10 @@ import Control.Lens
 import Control.Monad
 import qualified Data.Text as T
 import Data.Monoid
-import ProofCas.Proofs
+import ProofCas.Status
 import ProofCas.Paths
 import ProofCas.TermView
+import ProofCas.Proofs
 
 evalAt :: StPath -> Status -> Status
 evalAt sel st = either (const st) id $ st & stpath sel (evalIn st)
@@ -39,9 +40,10 @@ proofCasWidget bodyEl initialSt = do
 
     dragging <- holdDyn (StPath Thm []) draggedE
     let -- this will break if you drop other random shit from outside... hmm
-        drop  = uncurry swap <$> dragging `attachPromptlyDyn` droppedE
-        norm  = fmap evalAt `fmapMaybe` tagPromptlyDyn selection (keybind Equals)
-    stDyn <- fromUpdates initialSt [norm, drop]
+        drop   = uncurry swap <$> dragging `attachPromptlyDyn` droppedE
+        norm   = fmap evalAt `fmapMaybe` tagPromptlyDyn selection (keybind Equals)
+        factor = fmap factorOutSt `fmapMaybe` tagPromptlyDyn selection (keybind KeyF)
+    stDyn <- fromUpdates initialSt [drop, norm, factor]
 
     let ctx = RenderCtx (demux selection)
     termEvsE <- el "div" . dyn . ffor stDyn $ \st -> runRender ctx $ do

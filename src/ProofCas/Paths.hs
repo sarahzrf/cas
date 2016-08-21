@@ -9,7 +9,7 @@ import Control.Lens
 import Control.Monad.State
 import Data.List
 import Data.Maybe
-import ProofCas.Proofs
+import ProofCas.Status
 
 type TPathStep = TermParenLoc
 
@@ -23,7 +23,7 @@ data StPath =
   StPath {
     _statusPart :: StPart,
     _tpathPart  :: TPath
-  } deriving (Eq, Ord)
+  } deriving (Eq, Ord, Show)
 
 makeLenses ''StPath
 
@@ -81,7 +81,7 @@ tpath = foldl' (.) id . reverse . map tstep
 
 
 (->:) :: StPath -> TPathStep -> StPath
-StPath stPart tpathPart->:s = StPath stPart (s:tpathPart)
+StPath stpa pa->:s = StPath stpa (s:pa)
 
 
 stpart ::
@@ -94,7 +94,7 @@ stpart Prf      = statusProof
 stpath ::
   Applicative f => StPath ->
   (Term -> f Term) -> Status -> f Status
-stpath (StPath stP epaP) = stpart stP.tpath epaP
+stpath (StPath stpa pa) = stpart stpa.tpath pa
 
 
 -- not actually very useful - just for interface demo purposes!

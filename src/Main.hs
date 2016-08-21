@@ -14,7 +14,7 @@ import qualified Data.Text as T
 import Control.Monad.Trans
 import Data.List
 import GHCJS.DOM.Document
-import ProofCas.Proofs
+import ProofCas.Status
 import ProofCas.Interface
 
 Right std = parseProgram (BS.unpack $(embedFile "std.sfp"))
