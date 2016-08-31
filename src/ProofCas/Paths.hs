@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
 module ProofCas.Paths where
 
 import DependentImplicit.Core.Term
@@ -19,13 +18,7 @@ data StPart =
   Assm String | Thm | Prf
   deriving (Eq, Ord, Show)
 
-data StPath =
-  StPath {
-    _statusPart :: StPart,
-    _tpathPart  :: TPath
-  } deriving (Eq, Ord, Show)
-
-makeLenses ''StPath
+type StPath = (StPart, TPath)
 
 
 aIx :: (Eq k, Applicative f) => k -> (a -> f a) -> [(k, a)] -> f [(k, a)]
@@ -62,7 +55,7 @@ tstep' s m t = case (s, t) of
   (ClauseBody n, Case a o c) -> (\c -> Case a o c) <$> ix n (body m) c
 
   (AssertionPatArg, _) ->
-    error "You shouldn't even be using assertion patterns!"
+    error "TODO"
   (_, _) -> pure t
   where args m (CaseMotive (BindingTelescope a r)) = (\a -> CaseMotive (BindingTelescope a r)) <$> m a
         ret m (CaseMotive (BindingTelescope a r)) = (\r -> CaseMotive (BindingTelescope a r)) <$> m r
@@ -81,7 +74,7 @@ tpath = foldl' (.) id . reverse . map tstep
 
 
 (->:) :: StPath -> TPathStep -> StPath
-StPath stpa pa->:s = StPath stpa (s:pa)
+(part, pa)->:s = (part, (s:pa))
 
 
 stpart ::
@@ -94,14 +87,14 @@ stpart Prf      = statusProof
 stpath ::
   Applicative f => StPath ->
   (Term -> f Term) -> Status -> f Status
-stpath (StPath stpa pa) = stpart stpa.tpath pa
+stpath (part, pa) = stpart part.tpath pa
 
 
 -- not actually very useful - just for interface demo purposes!
 swap :: StPath -> StPath -> Status -> Status
 swap stpa stpa' = ap fromMaybe $ execStateT $ do
-  guard $ not (_tpathPart stpa  `ancestor` _tpathPart stpa' ||
-               _tpathPart stpa' `ancestor` _tpathPart stpa)
+  guard $ not (snd stpa  `ancestor` snd stpa' ||
+               snd stpa' `ancestor` snd stpa)
   a <- preuse (stpath stpa)  >>= lift
   b <- preuse (stpath stpa') >>= lift
   stpath stpa  .= b

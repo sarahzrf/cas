@@ -10,7 +10,9 @@ import Control.Monad
 import Data.Maybe
 import ProofCas.Status
 import ProofCas.Paths
-import Debug.Trace
+
+evalAt :: StPath -> Status -> Status
+evalAt sel st = either (const st) id $ st & stpath sel (evalIn st)
 
 boundIn :: Term -> [String]
 boundIn (Var _) = []
@@ -29,10 +31,10 @@ factorOut pa t = do
       noBound (In t)  = all (noBound . body) t
   guard (noBound a)
   let unusable = boundIn t ++ freeVarNames t ++ definedNames t
-      param    = freshenName (traceShowId unusable) "x"
+      param    = freshenName unusable "x"
       body     = t & tpath pa.~Var (Free (FreeVar param))
   return $ appH Expl (lamH Expl param body) a
 
 factorOutSt :: StPath -> Status -> Status
-factorOutSt (StPath stpa pa) = fromMaybe <*> stpart stpa (factorOut pa)
+factorOutSt (stpa, pa) = fromMaybe <*> stpart stpa (factorOut pa)
 

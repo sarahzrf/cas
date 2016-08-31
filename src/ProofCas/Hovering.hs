@@ -1,4 +1,5 @@
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE OverloadedStrings #-}
 module ProofCas.Hovering where
 
 import Reflex.Dom
@@ -36,9 +37,12 @@ classesFor ::
 classesFor =
   fmap (T.unwords . map fst . filter snd . Map.assocs) . sequenceA
 
-setClasses ::
+addClasses ::
   Reflex t =>
   Dynamic t T.Text -> Dynamic t (Map.Map T.Text T.Text) ->
   Dynamic t (Map.Map T.Text T.Text)
-setClasses = zipDynWith (\classes attrs -> attrs <> "class" =: classes)
+addClasses = zipDynWith (flip Map.alter "class" . alterer)
+  where alterer "" a        = a
+        alterer c  Nothing  = Just c
+        alterer c  (Just a) = Just (a <> " " <> c)
 

@@ -41,7 +41,7 @@ parseStatus code = do
 
 fromCode bodyEl c = case parseStatus c of
   Left err -> text (T.pack err)
-  Right st -> proofCasWidget bodyEl st
+  Right st -> sfpWidget bodyEl st
 
 
 main :: IO ()
