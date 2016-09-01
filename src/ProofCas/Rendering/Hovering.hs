@@ -1,6 +1,5 @@
 {-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE OverloadedStrings #-}
-module ProofCas.Hovering where
+module ProofCas.Rendering.Hovering where
 
 import Reflex.Dom
 import GHCJS.DOM.Types (IsElement, IsEvent)

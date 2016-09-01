@@ -1,4 +1,4 @@
-module ProofCas.Paths where
+module ProofCas.Backends.SFP.Paths where
 
 import DependentImplicit.Core.Term
 import Utils.ABT
@@ -8,15 +8,12 @@ import Control.Lens
 import Control.Monad.State
 import Data.List
 import Data.Maybe
-import ProofCas.Status
+import ProofCas.Rendering
+import ProofCas.Backends.SFP.Status
 
 type TPathStep = TermParenLoc
 
 type TPath = [TPathStep]
-
-data StPart =
-  Assm String | Thm | Prf
-  deriving (Eq, Ord, Show)
 
 type StPath = (StPart, TPath)
 

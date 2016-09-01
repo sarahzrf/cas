@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module ProofCas.Status where
+module ProofCas.Backends.SFP.Status where
 
 import Utils.Eval
 import DependentImplicit.Core.Term

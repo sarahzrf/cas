@@ -1,15 +1,14 @@
-module ProofCas.Proofs where
+module ProofCas.Backends.SFP.Proofs where
 
 import Utils.ABT
 import Utils.Vars
 import Utils.Plicity
 import DependentImplicit.Core.Term
-import DependentImplicit.Unification.Elaborator
 import Control.Lens
 import Control.Monad
 import Data.Maybe
-import ProofCas.Status
-import ProofCas.Paths
+import ProofCas.Backends.SFP.Status
+import ProofCas.Backends.SFP.Paths
 
 evalAt :: StPath -> Status -> Status
 evalAt sel st = either (const st) id $ st & stpath sel (evalIn st)

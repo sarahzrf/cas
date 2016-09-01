@@ -14,8 +14,8 @@ import qualified Data.Text as T
 import Control.Monad.Trans
 import Data.List
 import GHCJS.DOM.Document
-import ProofCas.Status
-import ProofCas.Interface
+import ProofCas.Backends.SFP.Status
+import ProofCas.Backends.SFP.Interface
 
 Right std = parseProgram (BS.unpack $(embedFile "std.sfp"))
 Right (_, ElabState sig defs _ _ _) = runElaborator0 (elabProgram std)

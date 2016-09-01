@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module ProofCas.SetDrag where
+module ProofCas.Rendering.SetDrag where
 
 import GHCJS.DOM.EventM (EventM, event)
 import GHCJS.DOM.Types (IsMouseEvent)

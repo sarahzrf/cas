@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
-module ProofCas.WriterInstances where
+module ProofCas.Rendering.WriterInstances where
 
 import Reflex.Dom
 import Control.Monad.Writer
