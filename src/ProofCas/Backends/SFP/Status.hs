@@ -2,9 +2,9 @@
 module ProofCas.Backends.SFP.Status where
 
 import Utils.Eval
-import DependentImplicit.Core.Term
-import DependentImplicit.Unification.Elaborator
-import DependentImplicit.Core.Evaluation
+import Dependent.Core.Term
+import Dependent.Unification.Elaborator
+import Dependent.Core.Evaluation
 import Control.Lens hiding (Context)
 import Control.Monad.Reader
 

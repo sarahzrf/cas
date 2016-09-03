@@ -1,24 +1,24 @@
 data Eq (a : Type) (x : a) (y : a) where
-  | Refl {a : Type} (x : a) : Eq a x x
+  | Refl (a : Type) (x : a) : Eq a x x
 end
 
-let eq_elim : {a : Type} -> (p : a -> Type) -> {x y : a} -> Eq a x y -> p x -> p y
-  = \{a} p {x} {y} e px ->
+let eq_elim : (a : Type) -> (p : a -> Type) -> (x y : a) -> Eq a x y -> p x -> p y
+  = \a p x y e px ->
     case y || e
     motive (y' : a) || (e' : Eq a x y') || p y'
     of
-    | .x || Refl .x -> px
+    | .x || Refl .a .x -> px
     end
 end
 
-let eq_trans : {a : Type} -> {x y z : a} -> Eq a x y -> Eq a y z -> Eq a x z
-  = \{a} {x} {y} {z} p q ->
-  eq_elim (\z -> Eq a x z) q p
+let eq_trans : (a : Type) -> (x y z : a) -> Eq a x y -> Eq a y z -> Eq a x z
+  = \a x y z p q ->
+  eq_elim a (\z -> Eq a x z) y z q p
 end
 
-let f_equal : {a b : Type} -> (f : a -> b) -> {x y : a} -> Eq a x y -> Eq b (f x) (f y)
-  = \{a} {b} f {x} {y} e ->
-  eq_elim (\y -> Eq b (f x) (f y)) e (Refl (f x))
+let f_equal : (a b : Type) -> (f : a -> b) -> (x y : a) -> Eq a x y -> Eq b (f x) (f y)
+  = \a b f x y e ->
+  eq_elim a (\y -> Eq b (f x) (f y)) x y e (Refl b (f x))
 end
 
 
@@ -38,13 +38,22 @@ let times : Nat -> Nat -> Nat where
 end
 
 let plus_S_shift : (x y : Nat) -> Eq Nat (plus (S x) y) (plus x (S y)) where
-  | plus_S_shift Z     y = Refl (S y)
-  | plus_S_shift (S x) y = f_equal (\x -> S x) (plus_S_shift x y)
+  | plus_S_shift Z     y = Refl Nat (S y)
+  | plus_S_shift (S x) y =
+      f_equal Nat Nat (\x -> S x)
+      (plus (S x) y) (plus x (S y))
+      (plus_S_shift x y)
 end
 
 let plus_comm : (x y : Nat) -> Eq Nat (plus x y) (plus y x) where
-  | plus_comm Z     Z     = Refl Z
-  | plus_comm Z     (S y) = f_equal (\x -> S x) (plus_comm Z y)
-  | plus_comm (S x) y     = eq_trans (f_equal (\x -> S x) (plus_comm x y)) (plus_S_shift y x)
+  | plus_comm Z     Z     = Refl Nat Z
+  | plus_comm Z     (S y) =
+      f_equal Nat Nat (\x -> S x)
+      (plus Z y) (plus y Z)
+      (plus_comm Z y)
+  | plus_comm (S x) y     =
+      eq_trans Nat (S (plus x y)) (S (plus y x)) (plus y (S x))
+      (f_equal Nat Nat (\x -> S x) (plus x y) (plus y x) (plus_comm x y))
+      (plus_S_shift y x)
 end
 

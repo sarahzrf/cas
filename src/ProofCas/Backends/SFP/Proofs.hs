@@ -2,8 +2,7 @@ module ProofCas.Backends.SFP.Proofs where
 
 import Utils.ABT
 import Utils.Vars
-import Utils.Plicity
-import DependentImplicit.Core.Term
+import Dependent.Core.Term
 import Control.Lens
 import Control.Monad
 import Data.Maybe
@@ -32,7 +31,7 @@ factorOut pa t = do
   let unusable = boundIn t ++ freeVarNames t ++ definedNames t
       param    = freshenName unusable "x"
       body     = t & tpath pa.~Var (Free (FreeVar param))
-  return $ appH Expl (lamH Expl param body) a
+  return $ appH (lamH param body) a
 
 factorOutSt :: StPath -> Status -> Status
 factorOutSt (stpa, pa) = fromMaybe <*> stpart stpa (factorOut pa)

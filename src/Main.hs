@@ -5,10 +5,10 @@ import Reflex.Dom
 import Data.FileEmbed
 import Utils.Vars
 import Utils.ABT
-import DependentImplicit.Unification.Elaborator
-import DependentImplicit.Unification.Elaboration
-import DependentImplicit.Core.Term
-import DependentImplicit.Core.Parser
+import Dependent.Unification.Elaborator
+import Dependent.Unification.Elaboration
+import Dependent.Core.Term
+import Dependent.Core.Parser
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text as T
 import Control.Monad.Trans

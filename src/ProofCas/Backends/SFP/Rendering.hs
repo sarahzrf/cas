@@ -5,10 +5,9 @@ module ProofCas.Backends.SFP.Rendering where
 import Reflex.Dom
 import Utils.Pretty
 import Utils.ABT
-import Utils.Plicity
 import Utils.Telescope
 import Utils.Vars
-import DependentImplicit.Core.Term
+import Dependent.Core.Term
 import Control.Monad
 import Data.Functor.Foldable
 import Data.Functor.Compose
@@ -41,17 +40,16 @@ instance Recursive Subterm where
             Defined v  -> Defined v
             Ann t y    -> Ann (rescope AnnTerm t) (rescope AnnType y)
             Type       -> Type
-            Fun p d c  -> Fun p (rescope FunArg d) (rescope FunRet c)
-            Lam p b    -> Lam p (rescope LamBody b)
-            App p f a  -> App p (rescope AppFun f) (rescope (AppArg p) a)
-            Con i a    -> Con i (zipWith (\n (p, a) -> (p, rescope (ConArg p n) a)) [0..] a)
+            Fun d c    -> Fun (rescope FunArg d) (rescope FunRet c)
+            Lam b      -> Lam (rescope LamBody b)
+            App f a    -> App (rescope AppFun f) (rescope AppArg a)
+            Con i a    -> Con i (zipWith (rescope . ConArg) [0..] a)
             Case a o c -> Case (zipWith (rescope . CaseArg) [0..] a) (rescopeMotive o) (zipWith rescopeClause [0..] c)
 
 
-wrapP :: MonadWidget t m => Bool -> Plicity -> m a -> m a
-wrapP True  Expl = bracket "(" ")"
-wrapP False Expl = id
-wrapP _     Impl = bracket "{" "}"
+wrapP :: MonadWidget t m => Bool -> m a -> m a
+wrapP True  = bracket "(" ")"
+wrapP False = id
 
 
 sfpPrec :: Term' Subterm -> Term' (Subterm, Bool)
@@ -69,9 +67,9 @@ sfpCls = \case
   In'  (Defined _)  -> "defined"
   In'  (Ann _ _)    -> "ann"
   In'  Type         -> "type"
-  In'  (Fun _ _ _)  -> "fun"
-  In'  (Lam _ _)    -> "lam"
-  In'  (App _ _ _)  -> "app"
+  In'  (Fun _ _)    -> "fun"
+  In'  (Lam _)      -> "lam"
+  In'  (App _ _)    -> "app"
   In'  (Con _ _)    -> "con"
   In'  (Case _ _ _) -> "case"
 
@@ -81,22 +79,22 @@ sfpStep (In' t) = case t of
   Defined v  -> textSpan (T.pack v)
   Ann t y    -> body' t >> textSpan " : " >> body' y
   Type       -> textSpan "Type"
-  Fun p d c  -> do
-    wrapP True p $ do
+  Fun d c    -> do
+    wrapP True $ do
       textSpan $ T.pack (unwords (names' c)) <> " : "
       body' d
     textSpan " \8594 "
     body' c
-  Lam p b    -> do
+  Lam b      -> do
     textSpan "\955"
-    wrapP False p . textSpan . T.pack . unwords . names' $ b
+    wrapP False . textSpan . T.pack . unwords . names' $ b
     textSpan " \8594 "
     body' b
-  App p f a  -> body' f >> textSpan " " >> wrapP False p (body' a)
+  App f a    -> body' f >> textSpan " " >> wrapP False (body' a)
   Con i []   -> textSpan (T.pack i)
   Con i a    -> do
     textSpan $ T.pack i <> " "
-    sepBy_ " " a $ \(p, a) -> wrapP False p $ body' a
+    sepBy_ " " a $ wrapP False . body'
   Case a o c -> do
     textSpan "case "
     sepBy_ " || " a body'

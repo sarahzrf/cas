@@ -1,6 +1,6 @@
 module ProofCas.Backends.SFP.Paths where
 
-import DependentImplicit.Core.Term
+import Dependent.Core.Term
 import Utils.ABT
 import Utils.Vars
 import Utils.Telescope
@@ -40,12 +40,12 @@ tstep' :: Applicative f => TPathStep ->
 tstep' s m t = case (s, t) of
   (AnnTerm,      Ann  t y)   -> (\t -> Ann  t y)   <$> m t
   (AnnType,      Ann  t y)   -> (\y -> Ann  t y)   <$> m y
-  (FunArg,       Fun  p d c) -> (\d -> Fun  p d c) <$> m d
-  (FunRet,       Fun  p d c) -> (\c -> Fun  p d c) <$> m c
-  (LamBody,      Lam  p b)   -> (\b -> Lam  p b)   <$> m b
-  (AppFun,       App  p f a) -> (\f -> App  p f a) <$> m f
-  (AppArg _,     App  p f a) -> (\a -> App  p f a) <$> m a
-  (ConArg _ n,   Con  i a)   -> (\a -> Con  i a)   <$> ix n (_2 m) a
+  (FunArg,       Fun  d c)   -> (\d -> Fun  d c)   <$> m d
+  (FunRet,       Fun  d c)   -> (\c -> Fun  d c)   <$> m c
+  (LamBody,      Lam  b)     -> (\b -> Lam  b)     <$> m b
+  (AppFun,       App  f a)   -> (\f -> App  f a)   <$> m f
+  (AppArg,       App  f a)   -> (\a -> App  f a)   <$> m a
+  (ConArg n,     Con  i a)   -> (\a -> Con  i a)   <$> ix n m a
   (CaseArg n,    Case a o c) -> (\a -> Case a o c) <$> ix n m a
   (MotiveArg n,  Case a o c) -> (\o -> Case a o c) <$> args (ix n m) o
   (MotiveRet,    Case a o c) -> (\o -> Case a o c) <$> ret m o
