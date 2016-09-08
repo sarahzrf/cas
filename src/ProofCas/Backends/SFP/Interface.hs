@@ -46,7 +46,7 @@ sfpWidget bodyEl initialSt = do
         norm   = fmap evalAt `fmapMaybe` tagPromptlyDyn selection (keybind bodyEl Equals)
         factor = fmap factorOutSt `fmapMaybe` tagPromptlyDyn selection (keybind bodyEl KeyF)
 
-    (stDyn, errE) <- fromUpdatesErr initialSt [(Right .) <$> drop, norm, factor]
+    (stDyn, errE) <- fromUpdatesErr initialSt [(Right .) <$> drop, proofStep <$> norm, proofStep <$> factor]
     let dstDyn = toDStatus <$> stDyn
     selection <- fromUpdates Nothing [sel, desel, up]
     (clickedE, dropsE) <- proofCasWidget sfpPrec sfpCls sfpStep dstDyn selection errE

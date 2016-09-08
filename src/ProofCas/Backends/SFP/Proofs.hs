@@ -9,6 +9,9 @@ import Data.Maybe
 import ProofCas.Backends.SFP.Status
 import ProofCas.Backends.SFP.Paths
 
+proofStep :: (Status -> Either String Status) -> Status -> Either String Status
+proofStep f st = do st' <- f st; checkStatus st'; return st'
+
 evalAt :: StPath -> Status -> Either String Status
 evalAt sel st = st & stpath sel (evalIn st)
 
