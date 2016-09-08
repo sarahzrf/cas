@@ -9,8 +9,8 @@ import Data.Maybe
 import ProofCas.Backends.SFP.Status
 import ProofCas.Backends.SFP.Paths
 
-evalAt :: StPath -> Status -> Status
-evalAt sel st = either (const st) id $ st & stpath sel (evalIn st)
+evalAt :: StPath -> Status -> Either String Status
+evalAt sel st = st & stpath sel (evalIn st)
 
 boundIn :: Term -> [String]
 boundIn (Var _) = []
@@ -33,6 +33,7 @@ factorOut pa t = do
       body     = t & tpath pa.~Var (Free (FreeVar param))
   return $ appH (lamH param body) a
 
-factorOutSt :: StPath -> Status -> Status
-factorOutSt (stpa, pa) = fromMaybe <*> stpart stpa (factorOut pa)
+factorOutSt :: StPath -> Status -> Either String Status
+factorOutSt (stpa, pa) = maybe (Left msg) Right . stpart stpa (factorOut pa)
+  where msg = "Can't factor out - contains bound variable"
 

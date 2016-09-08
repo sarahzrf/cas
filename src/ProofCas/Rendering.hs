@@ -12,6 +12,7 @@ import Control.Monad.Writer
 import Data.Functor.Foldable
 import Data.Functor.Compose
 import Data.List
+import qualified Data.List.NonEmpty as N
 import Data.Maybe
 import qualified Data.Text as T
 import ProofCas.Rendering.Hovering
@@ -132,16 +133,25 @@ proofCasWidget ::
   (f (Render t pa m) -> Render t pa m) ->
   Dynamic t (DStatus e) ->
   Dynamic t (Maybe (StPart, pa)) ->
+  Event t (N.NonEmpty String) ->
   m (Event t (StPart, pa), Event t ((StPart, pa), (StPart, pa)))
-proofCasWidget prec cls step dstDyn selection = do
+proofCasWidget prec cls step dstDyn selection errE = do
+  errors <- foldDyn (++) [] (map T.pack . N.toList <$> errE)
   let ctx = RenderCtx (demux selection)
-  (div, termEvsE) <- el' "div" . dyn . ffor dstDyn $ \st -> runRender ctx $ do
-    forM (_dstatusContext st) $ \(v, de) -> do
-      textSpan $ T.pack v <> " : "
-      renderTerm prec cls step (Assm v) de
-      el "br" $ return ()
+  (div, termEvsE) <- elClass' "div" "cas" $ do
+    termEvsE <- dyn . ffor dstDyn $ \st -> runRender ctx $ do
+      elClass "div" "assms" $ el "ul" $ do
+        forM_ (_dstatusContext st) $ \(v, de) -> el "li" $ do
+          textSpan $ T.pack v <> " : "
+          renderTerm prec cls step (Assm v) de
+      el "hr" $ return ()
+      elClass "div" "thm" $
+        renderTerm prec cls step Thm (_dstatusTheorem st)
     el "hr" $ return ()
-    renderTerm prec cls step Thm (_dstatusTheorem st)
+    elClass "div" "errors" $ el "ul" $ do
+      dyn . ffor errors $ \es -> do
+        forM_ es $ elClass "li" "error" . textSpan
+    return termEvsE
 
   let termEvE which = switchPromptly never $ leftmost . map which <$> termEvsE
   clickedE <- termEvE termClick

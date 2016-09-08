@@ -5,6 +5,7 @@ import Reflex.Dom
 import GHCJS.DOM.Types (IsElement, IsEvent)
 import Utils.Vars
 import Control.Lens
+import qualified Data.List.NonEmpty as N
 import ProofCas.Rendering
 import ProofCas.Backends.SFP.Rendering
 import ProofCas.Backends.SFP.Status
@@ -22,6 +23,13 @@ keybind bodyEl k = ffilter (==k) (keyCodeLookup <$> domEvent Keydown bodyEl)
 fromUpdates :: MonadWidget t m => a -> [Event t (a -> a)] -> m (Dynamic t a)
 fromUpdates initial updaters = foldDyn ($) initial (mergeWith (.) updaters)
 
+fromUpdatesErr :: MonadWidget t m => a -> [Event t (a -> Either e a)] -> m (Dynamic t a, Event t (N.NonEmpty e))
+fromUpdatesErr initial updaters = do
+    let l f (a, es) = either (\e -> (a, e:es)) (\a' -> (a', es)) (f a)
+        updaters' = mergeWith (.) . map (fmap l) $ updaters
+    (val, errs) <- mapAccum (\a f -> f (a, [])) initial updaters'
+    return (val, fmapMaybe N.nonEmpty errs)
+
 sfpWidget ::
   (MonadWidget t m, IsElement (RawElement d)) =>
   Element EventResult d t -> Status -> m ()
@@ -38,10 +46,9 @@ sfpWidget bodyEl initialSt = do
         norm   = fmap evalAt `fmapMaybe` tagPromptlyDyn selection (keybind bodyEl Equals)
         factor = fmap factorOutSt `fmapMaybe` tagPromptlyDyn selection (keybind bodyEl KeyF)
 
-    stDyn <- fromUpdates initialSt [drop, norm, factor]
+    (stDyn, errE) <- fromUpdatesErr initialSt [(Right .) <$> drop, norm, factor]
     let dstDyn = toDStatus <$> stDyn
     selection <- fromUpdates Nothing [sel, desel, up]
-    (clickedE, dropsE) <- proofCasWidget sfpPrec sfpCls sfpStep dstDyn selection
+    (clickedE, dropsE) <- proofCasWidget sfpPrec sfpCls sfpStep dstDyn selection errE
   return ()
-
 

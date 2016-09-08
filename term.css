@@ -3,35 +3,61 @@ html, body {
     height: 100%;
 }
 
-body {
+.cas {
     font-size: 48pt;
+    display: flex;
+    flex-direction: column;
+    height: 90%;
 }
+
+.cas > div {
+    margin: 18px;
+}
+
+.cas hr {
+    margin: 0px;
+}
+
+.cas ul {
+    list-style-type: none;
+    margin: 0px;
+    padding: 0px;
+}
+
+.text {
+    pointer-events: none;
+}
+
 
 .term {
     text-align: center;
     vertical-align: middle;
     display: inline-block;
 }
+
 .term-mouseover {
     outline: dashed 3px rgba(100,100,255,.5);
 }
+
 .term-dragenter {
     outline: dashed 3px rgba(255,100,100,.5);
 }
+
 .term-selected, .term-mouseover.term-selected {
     outline: dashed 3px rgba(50,50,255,.75);
 }
 
-.fix {
-    text-align: center;
-    vertical-align: middle;
-    display: inline-block;
-}
-.term hr {
-    margin: 0px;
+
+.errors {
+    overflow: auto;
+    white-space: nowrap;
 }
 
-.text {
-    pointer-events: none;
+.error:first-child {
+    color: red;
+}
+
+.error {
+    color: indianred;
 }
 
