@@ -42,11 +42,11 @@ sfpWidget bodyEl initialSt = do
         up    = fmap (_2%~parent) <$ keybind bodyEl Space
 
     let -- this will break if you drop other random shit from outside... hmm
-        drop   = uncurry swap <$> dropsE
+        drop   = uncurry handleDrop <$> dropsE
         norm   = fmap evalAt `fmapMaybe` tagPromptlyDyn selection (keybind bodyEl Equals)
         factor = fmap factorOutSt `fmapMaybe` tagPromptlyDyn selection (keybind bodyEl KeyF)
 
-    (stDyn, errE) <- fromUpdatesErr initialSt [(Right .) <$> drop, proofStep <$> norm, proofStep <$> factor]
+    (stDyn, errE) <- fromUpdatesErr initialSt $ map (fmap proofStep) [drop, norm, factor]
     let dstDyn = toDStatus <$> stDyn
     selection <- fromUpdates Nothing [sel, desel, up]
     (clickedE, dropsE) <- proofCasWidget sfpPrec sfpCls sfpStep dstDyn selection errE

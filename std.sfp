@@ -11,6 +11,11 @@ let eq_elim : (a : Type) -> (p : a -> Type) -> (x y : a) -> Eq a x y -> p x -> p
     end
 end
 
+let eq_sym : (a : Type) -> (x y : a) -> Eq a x y -> Eq a y x
+  = \a x y e ->
+  eq_elim a (\z -> Eq a z x) x y e (Refl a x)
+end
+
 let eq_trans : (a : Type) -> (x y z : a) -> Eq a x y -> Eq a y z -> Eq a x z
   = \a x y z p q ->
   eq_elim a (\z -> Eq a x z) y z q p
