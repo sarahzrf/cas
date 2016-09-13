@@ -39,7 +39,7 @@ sfpWidget bodyEl initialSt = do
 
     let sel   = const . Just <$> clickedE
         desel = const Nothing <$ clickedW
-        up    = fmap (_2%~parent) <$ keybind bodyEl Space
+        up    = fmap parent <$ keybind bodyEl Space
 
     let -- this will break if you drop other random shit from outside... hmm
         drop   = uncurry handleDrop <$> dropsE

@@ -25,12 +25,18 @@ aIx k m ((k', a):kas)
   | otherwise = ((k', a):) <$> aIx k m kas
 
 
-parent :: TPath -> TPath
-parent [] = []
-parent (s:ss) = ss
+parent' :: TPath -> TPath
+parent' [] = []
+parent' (s:ss) = ss
 
-ancestor :: TPath -> TPath -> Bool
-ancestor = isSuffixOf
+parent :: StPath -> StPath
+parent = _2%~parent'
+
+ancestor' :: TPath -> TPath -> Bool
+ancestor' = isSuffixOf
+
+ancestor :: StPath -> StPath -> Bool
+ancestor (st, pa) (st', pa') = st == st' && pa `ancestor'` pa'
 
 
 -- christ this is ugly
@@ -90,8 +96,7 @@ stpath (part, pa) = stpart part.tpath pa
 -- not actually very useful - just for interface demo purposes!
 swap :: StPath -> StPath -> Status -> Status
 swap stpa stpa' = ap fromMaybe $ execStateT $ do
-  guard $ not (snd stpa  `ancestor` snd stpa' ||
-               snd stpa' `ancestor` snd stpa)
+  guard $ not (stpa  `ancestor` stpa' || stpa' `ancestor` stpa)
   a <- preuse (stpath stpa)  >>= lift
   b <- preuse (stpath stpa') >>= lift
   stpath stpa  .= b
