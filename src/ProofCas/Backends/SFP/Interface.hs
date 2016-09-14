@@ -12,6 +12,22 @@ import ProofCas.Backends.SFP.Status
 import ProofCas.Backends.SFP.Paths
 import ProofCas.Backends.SFP.Proofs
 
+data History a = History {_past :: [a], _present :: a, _future :: [a]}
+
+dawn :: a -> History a
+dawn r = History [] r []
+
+back, forth :: History a -> History a
+back (History (p:ps) r f) = History ps p (r:f)
+back h = h
+forth (History p r (f:fs)) = History (r:p) f fs
+forth h = h
+
+-- not actually a lens, but the type is right
+tomorrow :: Lens' (History a) a
+tomorrow m (History p r f) = (\r' -> History (r:p) r' []) <$> m r
+
+
 toDStatus :: Status -> DStatus Subterm
 toDStatus Status{_statusContext=ctx, _statusTheorem=thm} =
   DStatus (map ctxEntry ctx) (Subterm ([], thm))
@@ -45,9 +61,13 @@ sfpWidget bodyEl initialSt = do
         drop   = uncurry handleDrop <$> dropsE
         norm   = fmap evalAt `fmapMaybe` tagPromptlyDyn selection (keybind bodyEl Equals)
         factor = fmap factorOutSt `fmapMaybe` tagPromptlyDyn selection (keybind bodyEl KeyF)
+        undo   = back  <$ keybind bodyEl KeyU
+        redo   = forth <$ keybind bodyEl KeyR
+        stUpdaters = map (fmap (tomorrow . proofStep)) [drop, norm, factor]
+        hUpdaters  = map (fmap (Right .)) [undo, redo]
 
-    (stDyn, errE) <- fromUpdatesErr initialSt $ map (fmap proofStep) [drop, norm, factor]
-    let dstDyn = toDStatus <$> stDyn
+    (stHist, errE) <- fromUpdatesErr (dawn initialSt) (stUpdaters ++ hUpdaters)
+    let dstDyn = toDStatus . _present <$> stHist
     selection <- fromUpdates Nothing [sel, desel, up]
     (clickedE, dropsE) <- proofCasWidget sfpPrec sfpCls sfpStep dstDyn selection errE
   return ()
