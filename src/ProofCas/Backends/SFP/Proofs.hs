@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE LambdaCase #-}
 module ProofCas.Backends.SFP.Proofs where
 
 import Utils.ABT
@@ -11,6 +12,7 @@ import Control.Lens hiding (rewrite)
 import Control.Monad
 import Data.Maybe
 import Data.Monoid
+import Data.Foldable hiding (fold)
 import ProofCas.Rendering (StPart(..))
 import ProofCas.Backends.SFP.Status
 import ProofCas.Backends.SFP.Paths
@@ -43,7 +45,7 @@ factorOut pa t = do
       noBound (In t)  = all (noBound . body) t
   guard (noBound a)
   let param    = freshFor t
-      body     = t & tpath pa.~Var (Free (FreeVar param))
+      body     = t & tpath pa.~F param
   return $ appH (lamH param body) a
 
 factorOutSt :: StPath -> Status -> Either String Status
@@ -51,12 +53,29 @@ factorOutSt (stpa, pa) = maybe (Left msg) Right . stpart stpa (factorOut pa)
   where msg = "Can't factor out - contains bound variable"
 
 
+pattern M n = Var (Meta (MetaVar n))
+pattern F n = Var (Free (FreeVar n))
 pattern S t <- Scope _ _ t
 pattern App' f x <- In (App (Scope _ _ f) (Scope _ _ x))
 
 handleDrop :: StPath -> StPath -> Status -> Either String Status
 handleDrop stpa stpa' st = fromMaybe (Right st) $ alaf First foldMap (\f -> f stpa stpa' st) handlers
   where handlers = [rewrite]
+
+useAs :: Term -> Term -> Term -> Status -> Either String (Term, Term, Substitution TermF)
+useAs ty prf goal st = do
+  let Status sig defs ctx _ _ = st
+      unify' s t = runElaborator (unify substitution context s t) sig defs ctx
+      unifyA n t = case (unify' t goal, metaify n t) of (Left _, Just t') -> unifyA (n + 1) t'; (r, _) -> ((,) n) <$> r
+      metaify n (In (Fun _ s)) = Just (instantiate s [Var (Meta (MetaVar n))])
+      metaify _ _ = Nothing
+      meta0 = 1 + fold (\case Meta (MetaVar n) -> n; _ -> 0) (foldl' max 0) (flip const) goal
+  (argCount, ((), es)) <- unifyA meta0 ty
+  let argsm = mapM (\i -> lookup (MetaVar i) (_substitution es)) [meta0..argCount - 1]
+  args <- maybe (Left "Couldn't infer all args") Right argsm
+  let ty' = foldl (\(In (Fun _ s)) a -> instantiate s [a]) ty args
+      prf' = foldl appH prf args
+  return (ty', prf', _substitution es)
 
 rewrite :: StPath -> StPath -> Status -> Maybe (Either String Status)
 rewrite stpa@(Assm v, pa@(ConArg n:steps)) stpa'@(Thm, pa') st = do
@@ -65,20 +84,11 @@ rewrite stpa@(Assm v, pa@(ConArg n:steps)) stpa'@(Thm, pa') st = do
   eqTy <- st^?stpart (Assm v)
   target <- st^?stpath stpa'
   return $ do
-    let Status sig defs ctx thm prf = st
+    let Status _ _ _ thm prf = st
     App' p _ <- maybe (Left "Rewrite target contains bound variable") Right $ factorOut pa' thm
-    let metaify n (In (Fun _ s)) = metaify (n + 1) (instantiate s [Var (Meta (MetaVar n))])
-        metaify n t = (n, t)
-        (argCount, metaified) = metaify 0 eqTy
-        In (Con _ [_, S lhsMeta, S rhsMeta]) = metaified
-        fromMeta = if n == 1 then rhsMeta else lhsMeta
-    ((), es) <- runElaborator (unify substitution context fromMeta target) sig defs ctx
-    let argsm = mapM (\i -> lookup (MetaVar i) (_substitution es)) [0..argCount - 1]
-    args <- maybe (Left "Couldn't infer all args to hypothesis") Right argsm
-    let eqTy' = foldl (\(In (Fun _ s)) a -> instantiate s [a]) eqTy args
-        In (Con _ [S argTy, S lhs, S rhs]) = eqTy'
-        eqPrf = foldl appH (Var (Free (FreeVar v))) args
-        (from, to, eqPrf') = if n == 1
+    let goal = conH "Eq" (if n == 1 then [M 0, M 1, target] else [M 0, target, M 1])
+    (In (Con _ [S argTy, S lhs, S rhs]), eqPrf, es) <- useAs eqTy (F v) goal st
+    let (from, to, eqPrf') = if n == 1
           then let sym = foldl1 appH [In (Defined "eq_sym"), argTy, lhs, rhs, eqPrf]
                in (rhs, lhs, sym)
           else (lhs, rhs, eqPrf)
