@@ -4,6 +4,7 @@ module ProofCas.Backends.SFP.Interface where
 import Reflex.Dom
 import GHCJS.DOM.Types (IsElement, IsEvent)
 import Utils.Vars
+import Dependent.Core.Term
 import Control.Lens
 import qualified Data.List.NonEmpty as N
 import ProofCas.Rendering
@@ -28,10 +29,10 @@ tomorrow :: Lens' (History a) a
 tomorrow m (History p r f) = (\r' -> History (r:p) r' []) <$> m r
 
 
-toDStatus :: Status -> DStatus Subterm
+toDStatus :: Status -> DStatus Term
 toDStatus Status{_statusContext=ctx, _statusTheorem=thm} =
-  DStatus (map ctxEntry ctx) (Subterm ([], thm))
-  where ctxEntry (FreeVar v, t) = (v, Subterm ([], t))
+  DStatus (map ctxEntry ctx) thm
+  where ctxEntry (FreeVar v, t) = (v, t)
 
 keybind :: Reflex t => Element EventResult d t -> Key -> Event t Key
 keybind bodyEl k = ffilter (==k) (keyCodeLookup <$> domEvent Keydown bodyEl)
@@ -69,6 +70,6 @@ sfpWidget bodyEl initialSt = do
     (stHist, errE) <- fromUpdatesErr (dawn initialSt) (stUpdaters ++ hUpdaters)
     let dstDyn = toDStatus . _present <$> stHist
     selection <- fromUpdates Nothing [sel, desel, up]
-    (clickedE, dropsE) <- proofCasWidget sfpPrec sfpCls sfpStep dstDyn selection errE
+    (clickedE, dropsE) <- proofCasWidget sfpPrec sfpStep dstDyn selection errE
   return ()
 

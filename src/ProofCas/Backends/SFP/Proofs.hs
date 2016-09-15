@@ -80,13 +80,13 @@ useAs ty prf goal st = do
 rewrite :: StPath -> StPath -> Status -> Maybe (Either String Status)
 rewrite stpa@(Assm v, pa@(ConArg n:steps)) stpa'@(Thm, pa') st = do
   guard $ all (==FunRet) steps && n `elem` [1, 2]
-  In (Con "Eq" [_, _, _]) <- st^?stpath (parent stpa)
+  In (Con "Op_61" [_, _, _]) <- st^?stpath (parent stpa)
   eqTy <- st^?stpart (Assm v)
   target <- st^?stpath stpa'
   return $ do
     let Status _ _ _ thm prf = st
     App' p _ <- maybe (Left "Rewrite target contains bound variable") Right $ factorOut pa' thm
-    let goal = conH "Eq" (if n == 1 then [M 0, M 1, target] else [M 0, target, M 1])
+    let goal = conH "Op_61" (if n == 1 then [M 0, M 1, target] else [M 0, target, M 1])
     (In (Con _ [S argTy, S lhs, S rhs]), eqPrf, es) <- useAs eqTy (F v) goal st
     let (from, to, eqPrf') = if n == 1
           then let sym = foldl1 appH [In (Defined "eq_sym"), argTy, lhs, rhs, eqPrf]

@@ -9,8 +9,6 @@ import GHCJS.DOM.Types (IsElement, IsEvent)
 import Control.Lens
 import Control.Monad.Reader
 import Control.Monad.Writer
-import Data.Functor.Foldable
-import Data.Functor.Compose
 import Data.List
 import qualified Data.List.NonEmpty as N
 import Data.Maybe
@@ -57,8 +55,8 @@ runRender ctx = flip runReaderT ctx . execWriterT
 
 
 termSpan ::
-  (Reflex t, MonadWidget t m, Eq pa) => T.Text -> (StPart, pa) -> Render t pa m -> Render t pa m
-termSpan termType stpa contents = do
+  (Reflex t, MonadWidget t m, Eq pa) => (StPart, pa) -> T.Text -> Render t pa m -> Render t pa m
+termSpan stpa termType contents = do
   selection <- asks selection
   rec
     hov <- holdDyn False =<< hovering span Mouseleave Mouseover
@@ -100,20 +98,15 @@ bracket :: MonadWidget t m => T.Text -> T.Text -> m a -> m a
 bracket o c m = textSpan o *> m <* textSpan c
 
 
-type Renderable e f pa =
-  (Recursive e, Base e ~ Compose ((,) pa) f, Functor f, Ord pa)
-
 renderTerm ::
-  (Renderable e f pa, MonadWidget t m) =>
-  (f e -> f (e, Bool)) ->
-  (f e -> T.Text) ->
-  (f (Render t pa m) -> Render t pa m) ->
+  (Ord pa, Monoid pa, MonadWidget t m) =>
+  (e -> l -> Bool) ->
+  ((l -> pa -> e -> Render t pa m) -> e -> (T.Text, Render t pa m)) ->
   StPart -> e -> Render t pa m
-renderTerm prec cls step part = go
+renderTerm prec step part = go mempty
   where
-    go e = termSpan (cls t) (part, pa) $ step subterms
-      where Compose (pa, t) = project e
-            subterms = prec t <&> \(sub, par) -> (if par then bracket "(" ")" else id) (go sub)
+    go pa = uncurry (termSpan (part, pa)) . step (recurse pa)
+    recurse pa l pa' e = go (pa' <> pa) e & (if prec e l then id else bracket "(" ")")
 
 
 data DStatus e =
@@ -127,15 +120,14 @@ data StPart =
   deriving (Eq, Ord, Show)
 
 proofCasWidget ::
-  (Renderable e f pa, MonadWidget t m) =>
-  (f e -> f (e, Bool)) ->
-  (f e -> T.Text) ->
-  (f (Render t pa m) -> Render t pa m) ->
+  (Ord pa, Monoid pa, MonadWidget t m) =>
+  (e -> l -> Bool) ->
+  ((l -> pa -> e -> Render t pa m) -> e -> (T.Text, Render t pa m)) ->
   Dynamic t (DStatus e) ->
   Dynamic t (Maybe (StPart, pa)) ->
   Event t (N.NonEmpty String) ->
   m (Event t (StPart, pa), Event t ((StPart, pa), (StPart, pa)))
-proofCasWidget prec cls step dstDyn selection errE = do
+proofCasWidget prec step dstDyn selection errE = do
   errors <- foldDyn (++) [] (map T.pack . N.toList <$> errE)
   let ctx = RenderCtx (demux selection)
   (div, termEvsE) <- elClass' "div" "cas" $ do
@@ -143,10 +135,10 @@ proofCasWidget prec cls step dstDyn selection errE = do
       elClass "div" "assms" $ el "ul" $ do
         forM_ (_dstatusContext st) $ \(v, de) -> el "li" $ do
           textSpan $ T.pack v <> " : "
-          renderTerm prec cls step (Assm v) de
+          renderTerm prec step (Assm v) de
       el "hr" $ return ()
       elClass "div" "thm" $
-        renderTerm prec cls step Thm (_dstatusTheorem st)
+        renderTerm prec step Thm (_dstatusTheorem st)
     el "hr" $ return ()
     elClass "div" "errors" $ el "ul" $ do
       dyn . ffor errors $ \es -> do

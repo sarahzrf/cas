@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveFunctor #-}
 module ProofCas.Backends.SFP.Rendering where
@@ -9,109 +11,95 @@ import Utils.Telescope
 import Utils.Vars
 import Dependent.Core.Term
 import Control.Monad
-import Data.Functor.Foldable
-import Data.Functor.Compose
 import Data.Monoid
+import Data.Char
 import Data.List
 import qualified Data.Text as T
 import ProofCas.Rendering
 import ProofCas.Backends.SFP.Paths
 
-data Term' a = Var' Variable | In' (TermF (Scope' a)) deriving Functor
-data Scope' a =
-  Scope' {
-    names' :: [String],
-    freeNames' :: [FreeVar],
-    body' :: a
-  } deriving Functor
-
-newtype Subterm = Subterm (TPath, Term)
-type instance Base Subterm = Compose ((,) TPath) Term'
-instance Recursive Subterm where
-  project (Subterm (pa, Var v)) = Compose (pa, Var' v)
-  project (Subterm (pa, In t)) = Compose (pa, In' t')
-    where rescope s (Scope n f b) = Scope' n f (Subterm (s:pa, b))
-          rescopeMotive (CaseMotive (BindingTelescope b r)) =
-            CaseMotive (BindingTelescope (zipWith (rescope . MotiveArg) [0..] b) (rescope MotiveRet r))
-          -- this is incorrect actually :(
-          rescopeClause n (Clause p r) =
-            Clause (map (fmap (rescope AssertionPatArg)) p) (rescope (ClauseBody n) r)
-          t' = case t of
-            Defined v  -> Defined v
-            Ann t y    -> Ann (rescope AnnTerm t) (rescope AnnType y)
-            Type       -> Type
-            Fun d c    -> Fun (rescope FunArg d) (rescope FunRet c)
-            Lam b      -> Lam (rescope LamBody b)
-            App f a    -> App (rescope AppFun f) (rescope AppArg a)
-            Con i a    -> Con i (zipWith (rescope . ConArg) [0..] a)
-            Case a o c -> Case (zipWith (rescope . CaseArg) [0..] a) (rescopeMotive o) (zipWith rescopeClause [0..] c)
-
+data TermParenLoc' = Normal TermParenLoc | BinOpArg
 
 wrapP :: MonadWidget t m => Bool -> m a -> m a
 wrapP True  = bracket "(" ")"
 wrapP False = id
 
 
-sfpPrec :: Term' Subterm -> Term' (Subterm, Bool)
-sfpPrec = fmap go
-  where
-    go sub@(Subterm (pa, t))
-      | s:_ <- pa = (sub, not (parenLoc t s))
-      | otherwise = (sub, False)
+opFor :: Term -> Maybe T.Text
+opFor = \case Var v -> go (name v); In (Defined d) -> go d; _ -> Nothing
+  where go ('o':'p':'_':n) | all isDigit n = Just . T.singleton . toEnum . read $ n
+        go _ = Nothing
+conOpFor :: String -> Maybe T.Text
+conOpFor ('O':'p':'_':n) | all isDigit n = Just . T.singleton . toEnum . read $ n
+conOpFor _ = Nothing
+pattern BinOp x o y <- App Scope{body=In (App Scope{body=(opFor -> Just o)} x)} y
+pattern TrinCon x o s y <- Con (conOpFor -> Just o) [s, x, y]
 
-sfpCls :: Term' a -> T.Text
-sfpCls = \case
-  Var' (Free _)     -> "free"
-  Var' (Bound _ _)  -> "bound"
-  Var' (Meta _)     -> "meta"
-  In'  (Defined _)  -> "defined"
-  In'  (Ann _ _)    -> "ann"
-  In'  Type         -> "type"
-  In'  (Fun _ _)    -> "fun"
-  In'  (Lam _)      -> "lam"
-  In'  (App _ _)    -> "app"
-  In'  (Con _ _)    -> "con"
-  In'  (Case _ _ _) -> "case"
+sfpPrec :: Term -> TermParenLoc' -> Bool
+sfpPrec (In (BinOp x o y)) (Normal FunRet) = True
+sfpPrec (In (TrinCon x o s y)) (Normal FunRet) = True
+sfpPrec (In (BinOp x o y)) _ = False
+sfpPrec (In (TrinCon x o s y)) _ = False
+sfpPrec t (Normal l) = parenLoc t l
+sfpPrec (Var _) BinOpArg = True
+sfpPrec (In (Defined _)) BinOpArg = True
+sfpPrec (In (App _ _)) BinOpArg = True
+sfpPrec t BinOpArg = False
 
-sfpStep :: MonadWidget t m => Term' (Render t pa m) -> Render t pa m
-sfpStep (Var' v) = textSpan . T.pack . name $ v
-sfpStep (In' t) = case t of
-  Defined v  -> textSpan (T.pack v)
-  Ann t y    -> body' t >> textSpan " : " >> body' y
-  Type       -> textSpan "Type"
-  Fun d c    -> do
+sfpStep ::
+  MonadWidget t m =>
+  ((TermParenLoc' -> TPath -> Term -> Render t TPath m) ->
+  Term -> (T.Text, Render t TPath m))
+sfpStep rec (Var v) = (cls v, textSpan . T.pack . name $ v)
+  where cls = \case Free _ -> "free"; Bound _ _ -> "bound"; Meta _ -> "meta"
+sfpStep rec (In t) = case t of
+  Defined v   -> ("defined", textSpan (T.pack v))
+  Ann t y     -> ("ann", rec' AnnTerm t >> textSpan " : " >> rec' AnnType y)
+  Type        -> ("type", textSpan "Type")
+  Fun d c     -> ("fun", do
     wrapP True $ do
-      textSpan $ T.pack (unwords (names' c)) <> " : "
-      body' d
+      textSpan $ T.pack (unwords (names c)) <> " : "
+      rec' FunArg d
     textSpan " \8594 "
-    body' c
-  Lam b      -> do
+    rec' FunRet c)
+  Lam b       -> ("lam", do
     textSpan "\955"
-    wrapP False . textSpan . T.pack . unwords . names' $ b
+    wrapP False . textSpan . T.pack . unwords . names $ b
     textSpan " \8594 "
-    body' b
-  App f a    -> body' f >> textSpan " " >> wrapP False (body' a)
-  Con i []   -> textSpan (T.pack i)
-  Con i a    -> do
+    rec' LamBody b)
+  BinOp x o y -> ("binop", do
+    rec BinOpArg [AppArg, AppFun] (body x)
+    textSpan (" " <> o <> " ")
+    rec BinOpArg [AppArg] (body y))
+  App f a     -> ("app", rec' AppFun f >> textSpan " " >> rec' AppArg a)
+  Con i []    -> ("con", textSpan (T.pack i))
+  TrinCon x o s y -> ("trinop", do
+    rec BinOpArg [ConArg 1] (body x)
+    textSpan (" " <> o)
+    el "sub" $ rec (Normal FunRet) [ConArg 0] (body s)
+    textSpan " "
+    rec BinOpArg [ConArg 2] (body y))
+  Con i a     -> ("con", do
     textSpan $ T.pack i <> " "
-    sepBy_ " " a $ wrapP False . body'
-  Case a o c -> do
+    sepBy_ " " (zip [0..] a) (uncurry (rec' . ConArg)))
+  Case a o c  -> ("case", do
     textSpan "case "
-    sepBy_ " || " a body'
+    sepBy_ " || " (zip [0..] a) (uncurry (rec' . CaseArg))
 
     textSpan " motive "
     let CaseMotive (BindingTelescope b r) = o
-    forM_ (zip b (names' r)) $ \(b, v) -> do
+    forM_ (zip3 [0..] b (names r)) $ \(n, b, v) -> do
       textSpan $ "(" <> T.pack v <> " : "
-      body' b
+      rec' (MotiveArg n) b
       textSpan ") || "
-    body' r
+    rec' MotiveRet r
 
     textSpan " of "
-    sepBy_ " | " c $ \(Clause p r) -> do
-      textSpan $ T.pack . intercalate " || " . map (const "placeholder" :: PatternF (Scope' (Render t pa m)) -> [Char]) $ p
+    sepBy_ " | " (zip [0..] c) $ \(n, Clause p r) -> do
+      textSpan $ T.pack . intercalate " || " . map (const "placeholder") $ p
       textSpan " \8594 "
-      body' r
+      rec' (ClauseBody n) r
 
-    textSpan " end"
+    textSpan " end")
+  where rec' l t = rec (Normal l) [l] (body t)
 
