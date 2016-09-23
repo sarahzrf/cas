@@ -34,12 +34,6 @@ toDStatus Status{_statusContext=ctx, _statusTheorem=thm} =
   DStatus (map ctxEntry ctx) thm
   where ctxEntry (FreeVar v, t) = (v, t)
 
-keybind :: Reflex t => Element EventResult d t -> Key -> Event t Key
-keybind bodyEl k = ffilter (==k) (keyCodeLookup <$> domEvent Keydown bodyEl)
-
-fromUpdates :: MonadWidget t m => a -> [Event t (a -> a)] -> m (Dynamic t a)
-fromUpdates initial updaters = foldDyn ($) initial (mergeWith (.) updaters)
-
 fromUpdatesErr :: MonadWidget t m => a -> [Event t (a -> Either e a)] -> m (Dynamic t a, Event t (N.NonEmpty e))
 fromUpdatesErr initial updaters = do
     let l f (a, es) = either (\e -> (a, e:es)) (\a' -> (a', es)) (f a)
@@ -52,12 +46,6 @@ sfpWidget ::
   Element EventResult d t -> Status -> m ()
 sfpWidget bodyEl initialSt = do
   rec
-    clickedW <- ownEvent Click bodyEl
-
-    let sel   = const . Just <$> clickedE
-        desel = const Nothing <$ clickedW
-        up    = fmap parent <$ keybind bodyEl Space
-
     let -- this will break if you drop other random shit from outside... hmm
         drop   = uncurry handleDrop <$> dropsE
         norm   = fmap evalAt `fmapMaybe` tagPromptlyDyn selection (keybind bodyEl Equals)
@@ -68,8 +56,7 @@ sfpWidget bodyEl initialSt = do
         hUpdaters  = map (fmap (Right .)) [undo, redo]
 
     (stHist, errE) <- fromUpdatesErr (dawn initialSt) (stUpdaters ++ hUpdaters)
-    let dstDyn = toDStatus . _present <$> stHist
-    selection <- fromUpdates Nothing [sel, desel, up]
-    (clickedE, dropsE) <- proofCasWidget sfpPrec sfpStep dstDyn selection errE
+    let dstDyn = fmap addPaths . toDStatus .  _present <$> stHist
+    (selection, dropsE) <- proofCasWidget sfpPrec sfpStep dstDyn bodyEl errE
   return ()
 

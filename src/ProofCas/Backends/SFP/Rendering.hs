@@ -1,7 +1,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE DeriveFunctor #-}
 module ProofCas.Backends.SFP.Rendering where
 
 import Reflex.Dom
@@ -11,6 +10,8 @@ import Utils.Telescope
 import Utils.Vars
 import Dependent.Core.Term
 import Control.Monad
+import Control.Monad.Reader
+import Data.Functor.Compose
 import Data.Monoid
 import Data.Char
 import Data.List
@@ -20,65 +21,98 @@ import ProofCas.Backends.SFP.Paths
 
 data TermParenLoc' = Normal TermParenLoc | BinOpArg
 
-wrapP :: MonadWidget t m => Bool -> m a -> m a
-wrapP True  = bracket "(" ")"
-wrapP False = id
+wrapP :: MonadWidget t m => m a -> m a
+wrapP = bracket "(" ")"
 
 
-opFor :: Term -> Maybe T.Text
-opFor = \case Var v -> go (name v); In (Defined d) -> go d; _ -> Nothing
+data PathABT f
+  = PathVar TPath Variable
+  | PathIn TPath (f (PathScope f))
+data PathScope f =
+  PathScope {
+    pathNames :: [String],
+    pathFreeNames :: [FreeVar],
+    pathBody :: PathABT f
+  }
+type PathTerm = PathABT TermF
+addPaths :: Term -> PathTerm
+addPaths = go []
+  where go cur (Var v) = PathVar cur v
+        go cur (In t) = PathIn cur $ case t of
+          Defined v  -> Defined v
+          Ann t y    -> Ann (t@:AnnTerm) (y@:AnnType)
+          Type       -> Type
+          Fun d c    -> Fun (d@:FunArg) (c@:FunRet)
+          Lam b      -> Lam (b@:LamBody)
+          App f a    -> App (f@:AppFun) (a@:AppArg)
+          Con i a    -> Con i (zipWith (\n a -> a@:ConArg n) [0..] a)
+          Case a o c -> Case (zipWith (\n a -> a@:CaseArg n) [0..] a) (motive o) (zipWith clause [0..] c)
+          where Scope n f b@:s = PathScope n f (go (s:cur) b)
+                motive (CaseMotive (BindingTelescope b r)) =
+                  CaseMotive (BindingTelescope (zipWith (\n a -> a@:MotiveArg n) [0..] b) (r@:MotiveRet))
+                -- this is incorrect actually :(
+                clause n (Clause p r) =
+                  Clause (map (fmap (@:AssertionPatArg)) p) (r@:ClauseBody n)
+
+unPath :: PathTerm -> Term
+unPath (PathVar _ v) = Var v
+unPath (PathIn  _ t) = In (fmap unPathScope t)
+  where unPathScope (PathScope n f b) = Scope n f (unPath b)
+
+
+opFor :: PathTerm -> Maybe T.Text
+opFor = \case PathVar _ v -> go (name v); PathIn _ (Defined d) -> go d; _ -> Nothing
   where go ('o':'p':'_':n) | all isDigit n = Just . T.singleton . toEnum . read $ n
         go _ = Nothing
 conOpFor :: String -> Maybe T.Text
 conOpFor ('O':'p':'_':n) | all isDigit n = Just . T.singleton . toEnum . read $ n
 conOpFor _ = Nothing
-pattern BinOp x o y <- App Scope{body=In (App Scope{body=(opFor -> Just o)} x)} y
+pattern I b <- PathIn _ b
+pattern S b <- PathScope{pathBody=b}
+pattern BinOp x o y <- App (S (PathIn _ (App (S (opFor -> Just o)) x))) y
 pattern TrinCon x o s y <- Con (conOpFor -> Just o) [s, x, y]
 
-sfpPrec :: Term -> TermParenLoc' -> Bool
-sfpPrec (In (BinOp x o y)) (Normal FunRet) = True
-sfpPrec (In (TrinCon x o s y)) (Normal FunRet) = True
-sfpPrec (In (BinOp x o y)) _ = False
-sfpPrec (In (TrinCon x o s y)) _ = False
-sfpPrec t (Normal l) = parenLoc t l
-sfpPrec (Var _) BinOpArg = True
-sfpPrec (In (Defined _)) BinOpArg = True
-sfpPrec (In (App _ _)) BinOpArg = True
+sfpPrec :: PathTerm -> TermParenLoc' -> Bool
+sfpPrec (I (BinOp x o y)) (Normal FunRet) = True
+sfpPrec (I (TrinCon x o s y)) (Normal FunRet) = True
+sfpPrec (I (BinOp x o y)) _ = False
+sfpPrec (I (TrinCon x o s y)) _ = False
+sfpPrec t (Normal l) = parenLoc (unPath t) l
+sfpPrec (PathVar _ _) BinOpArg = True
+sfpPrec (I (Defined _)) BinOpArg = True
+sfpPrec (I (App _ _)) BinOpArg = True
 sfpPrec t BinOpArg = False
 
-sfpStep ::
-  MonadWidget t m =>
-  ((TermParenLoc' -> TPath -> Term -> Render t TPath m) ->
-  Term -> (T.Text, Render t TPath m))
-sfpStep rec (Var v) = (cls v, textSpan . T.pack . name $ v)
+sfpStep :: StepFunc TermParenLoc' TPath PathTerm
+sfpStep (PathVar pa v) = (cls v, pa, const . textSpan . T.pack . name $ v)
   where cls = \case Free _ -> "free"; Bound _ _ -> "bound"; Meta _ -> "meta"
-sfpStep rec (In t) = case t of
+sfpStep (PathIn pa t) = (\(y, b) -> (y, pa, runReaderT b)) $ case t of
   Defined v   -> ("defined", textSpan (T.pack v))
   Ann t y     -> ("ann", rec' AnnTerm t >> textSpan " : " >> rec' AnnType y)
   Type        -> ("type", textSpan "Type")
   Fun d c     -> ("fun", do
-    wrapP True $ do
-      textSpan $ T.pack (unwords (names c)) <> " : "
+    wrapP $ do
+      textSpan $ T.pack (unwords (pathNames c)) <> " : "
       rec' FunArg d
     textSpan " \8594 "
     rec' FunRet c)
   Lam b       -> ("lam", do
     textSpan "\955"
-    wrapP False . textSpan . T.pack . unwords . names $ b
+    textSpan . T.pack . unwords . pathNames $ b
     textSpan " \8594 "
     rec' LamBody b)
-  BinOp x o y -> ("binop", do
-    rec BinOpArg [AppArg, AppFun] (body x)
+  BinOp x o y -> ("binop", ReaderT $ \rec -> do
+    rec BinOpArg (pathBody x)
     textSpan (" " <> o <> " ")
-    rec BinOpArg [AppArg] (body y))
+    rec BinOpArg (pathBody y))
   App f a     -> ("app", rec' AppFun f >> textSpan " " >> rec' AppArg a)
   Con i []    -> ("con", textSpan (T.pack i))
-  TrinCon x o s y -> ("trinop", do
-    rec BinOpArg [ConArg 1] (body x)
+  TrinCon x o s y -> ("trinop", ReaderT $ \rec -> do
+    rec BinOpArg (pathBody x)
     textSpan (" " <> o)
-    el "sub" $ rec (Normal FunRet) [ConArg 0] (body s)
+    el "sub" $ rec (Normal FunRet) (pathBody s)
     textSpan " "
-    rec BinOpArg [ConArg 2] (body y))
+    rec BinOpArg (pathBody y))
   Con i a     -> ("con", do
     textSpan $ T.pack i <> " "
     sepBy_ " " (zip [0..] a) (uncurry (rec' . ConArg)))
@@ -88,7 +122,7 @@ sfpStep rec (In t) = case t of
 
     textSpan " motive "
     let CaseMotive (BindingTelescope b r) = o
-    forM_ (zip3 [0..] b (names r)) $ \(n, b, v) -> do
+    forM_ (zip3 [0..] b (pathNames r)) $ \(n, b, v) -> do
       textSpan $ "(" <> T.pack v <> " : "
       rec' (MotiveArg n) b
       textSpan ") || "
@@ -101,5 +135,5 @@ sfpStep rec (In t) = case t of
       rec' (ClauseBody n) r
 
     textSpan " end")
-  where rec' l t = rec (Normal l) [l] (body t)
+  where rec' l t = ReaderT $ \rec -> rec (Normal l) (pathBody t)
 
