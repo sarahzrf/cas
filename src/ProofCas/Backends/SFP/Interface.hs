@@ -56,7 +56,7 @@ sfpWidget bodyEl initialSt = do
         hUpdaters  = map (fmap (Right .)) [undo, redo]
 
     (stHist, errE) <- fromUpdatesErr (dawn initialSt) (stUpdaters ++ hUpdaters)
-    let dstDyn = fmap addPaths . toDStatus .  _present <$> stHist
-    (selection, dropsE) <- proofCasWidget sfpPrec sfpStep dstDyn bodyEl errE
+    let dstDyn = fmap (sfpDisplay [] Nothing) . toDStatus .  _present <$> stHist
+    (selection, dropsE) <- proofCasWidget dstDyn bodyEl errE
   return ()
 
