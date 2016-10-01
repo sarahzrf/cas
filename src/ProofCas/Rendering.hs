@@ -1,8 +1,8 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE TupleSections #-}
 module ProofCas.Rendering where
 
 import Reflex.Dom hiding (preventDefault, stopPropagation)
@@ -22,6 +22,7 @@ import Data.String
 import ProofCas.Rendering.Hovering
 import ProofCas.Rendering.SetDrag
 import ProofCas.Rendering.WriterInstances
+import ProofCas.Navigation
 
 wrapDomEvent' ::
   (IsElement e, PerformEvent t m, TriggerEvent t m) =>
@@ -39,14 +40,12 @@ ownEvent en el = ffilter id <$> eventWithIsOwn en el
 
 type P id = (StPart, id)
 
-type Tree id = M.Map (P id) (Maybe id, [id])
-
 data RenderRes t id =
   RenderRes {
     termClicks :: [Event t (P id)],
     termDrags  :: [Event t (P id)],
     termDrops  :: [Event t (P id)],
-    tree       :: Tree id
+    tree       :: Tree StPart id
   }
 
 instance Ord id => Monoid (RenderRes t id) where
@@ -165,35 +164,6 @@ keybind bodyEl k = ffilter (==k) (keyCodeLookup <$> domEvent Keydown bodyEl)
 fromUpdates :: MonadWidget t m => a -> [Event t (a -> a)] -> m (Dynamic t a)
 fromUpdates initial updaters = foldDyn ($) initial (mergeWith (.) updaters)
 
-ifN _ m@(Just _) = m
-ifN m _ = m
-
-parent :: Ord id => Tree id -> Maybe (P id) -> Maybe (P id)
-parent tree msel = do
-  sel@(part, _) <- msel
-  (mpar, _) <- M.lookup sel tree
-  par <- mpar
-  return (part, par)
-
-child :: Ord id => ([id] -> Maybe id) -> Tree id -> Maybe (P id) -> Maybe (P id)
-child which tree msel = do
-  sel@(part, _) <- msel
-  (_, children) <- M.lookup sel tree
-  first <- which children
-  return (part, first)
-
-sib :: Ord id => (Int -> Int) -> ([id] -> Maybe id) -> Bool -> Tree id -> Maybe (P id) -> Maybe (P id)
-sib ixF which base tree msel = do
-  sel@(part, selId) <- msel
-  (mpar, _) <- M.lookup sel tree
-  par <- mpar
-  (_, sibs) <- M.lookup (part, par) tree
-  selIx <- findIndex (==selId) sibs
-  -- case sibs^?ix (ixF selIx) of Nothing -> child which tree msel; Just sib -> return (part, sib)
-  (part,) <$> sibs^?ix (ixF selIx) <|>
-    (parent tree msel & sib ixF which False tree) <|>
-    (guard base >> child which tree msel)
-
 proofCasWidget ::
   (Ord id, MonadWidget t m, IsElement (RawElement d)) =>
   Dynamic t (DStatus (DTerm id)) ->
@@ -228,11 +198,12 @@ proofCasWidget dstDyn bodyEl errE = do
 
     let sel   = const . Just <$> clickedE
         desel = const Nothing <$ clickedW
-        up    = parent <$> tagPromptlyDyn treeD (keybind bodyEl ArrowUp)
-        down  = child (^?_head) <$> tagPromptlyDyn treeD (keybind bodyEl ArrowDown)
-        left  = sib (subtract 1) (^?_head) True <$> tagPromptlyDyn treeD (keybind bodyEl ArrowLeft)
-        right = sib (+1) (^?_last) True <$> tagPromptlyDyn treeD (keybind bodyEl ArrowRight)
-    selection <- fromUpdates Nothing $ [sel, desel] ++ map (fmap (ifN <*>)) [up, down, left, right]
+        up    = (upwards,   ArrowUp)
+        down  = (firstborn, ArrowDown)
+        left  = (prevLeaf,  ArrowLeft)
+        right = (nextLeaf,  ArrowRight)
+        dir (m, e) = runMovement m <$> tagPromptlyDyn treeD (keybind bodyEl e)
+    selection <- fromUpdates Nothing $ [sel, desel] ++ map dir [up, down, left, right]
 
     dragging <- holdDyn Nothing (leftmost [Nothing <$ domEvent Dragend div, Just <$> draggedE])
     let dropsE = attachPromptlyDynWithMaybe (\g r -> (,r) <$> g) dragging droppedE
