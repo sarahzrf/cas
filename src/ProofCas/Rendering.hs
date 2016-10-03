@@ -21,7 +21,6 @@ import qualified Data.Text as T
 import Data.String
 import ProofCas.Rendering.Hovering
 import ProofCas.Rendering.SetDrag
-import ProofCas.Rendering.WriterInstances
 import ProofCas.Navigation
 
 wrapDomEvent' ::
@@ -57,16 +56,16 @@ data RenderCtx t id =
     selection :: Demux t (Maybe (P id))
   }
 
-type Render  t id m = (MonadWriter (RenderRes t id) m, MonadReader (RenderCtx t id) m, MonadWidget t m)
-type RenderM t id m = WriterT (RenderRes t id) (ReaderT (RenderCtx t id) m)
+type Render  t id m = (MonadDynamicWriter t (RenderRes t id) m, MonadReader (RenderCtx t id) m, MonadWidget t m)
+type RenderM t id m = DynamicWriterT t (RenderRes t id) (ReaderT (RenderCtx t id) m)
 
 renderRes ::
   Reflex t => P id -> Event t a -> Event t b -> Event t c -> RenderRes t id
 renderRes stid clickE dragE dropE =
   RenderRes [stid <$ clickE] [stid <$ dragE] [stid <$ dropE] M.empty
 
-execRender :: Monad m => RenderCtx t id -> RenderM t id m a -> m (RenderRes t id)
-execRender ctx = flip runReaderT ctx . execWriterT
+execRender :: (Ord id, MonadWidget t m) => RenderCtx t id -> RenderM t id m a -> m (Dynamic t (RenderRes t id))
+execRender ctx = flip runReaderT ctx . fmap snd . runDynamicWriterT
 
 
 termSpan ::
@@ -94,7 +93,7 @@ termSpan stid termType contents = do
   dragE <- wrapDomEvent (_element_raw span) (onEventName Dragstart)
     (setCurrentDragData "dummy" "dummy" >> stopPropagation)
   clickedE <- ownEvent Click span
-  tell $ renderRes stid clickedE dragE dropE
+  tellDyn . pure $ renderRes stid clickedE dragE dropE
   return a
 
 
@@ -145,7 +144,7 @@ renderTerm part = go Nothing
       let me = termId dt
           (children, body) = runBazaar (runRL (render dt)) (\subterm -> ([termId subterm], go (Just me) subterm))
       termSpan (part, me) (termType dt) body
-      tell mempty{tree=(part, me) =: (parent, children)}
+      tellDyn . pure $ mempty{tree=(part, me) =: (parent, children)}
 
 
 data DStatus e =
@@ -174,8 +173,8 @@ proofCasWidget dstDyn bodyEl errE = do
   rec
     errors <- foldDyn (++) [] (map T.pack . N.toList <$> errE)
     let ctx = RenderCtx (demux selection)
-    (div, termEvsE) <- elClass' "div" "cas" $ do
-      termEvsE <- dyn . ffor dstDyn $ \st -> execRender ctx $ do
+    (div, termEvsD) <- elClass' "div" "cas" $ do
+      termEvsD <- execRender ctx . dyn . ffor dstDyn $ \st -> do
         elClass "div" "assms" $ el "ul" $ do
           forM_ (_dstatusContext st) $ \(v, dt) -> el "li" $ do
             textSpan $ T.pack v <> " : "
@@ -187,13 +186,13 @@ proofCasWidget dstDyn bodyEl errE = do
       elClass "div" "errors" $ el "ul" $ do
         dyn . ffor errors $ \es -> do
           forM_ es $ elClass "li" "error" . textSpan
-      return termEvsE
+      return termEvsD
 
-    let termEvE which = switchPromptly never $ leftmost . which <$> termEvsE
-    clickedE <- termEvE termClicks
-    draggedE <- termEvE termDrags
-    droppedE <- termEvE termDrops
-    treeD    <- holdDyn M.empty (tree <$> termEvsE)
+    let termEv which = switchPromptlyDyn $ leftmost . which <$> termEvsD
+        clickedE = termEv termClicks
+        draggedE = termEv termDrags
+        droppedE = termEv termDrops
+        treeD    = tree <$> termEvsD
     clickedW <- ownEvent Click bodyEl
 
     let sel   = const . Just <$> clickedE
