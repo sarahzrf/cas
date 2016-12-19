@@ -14,6 +14,7 @@ import qualified Data.Text as T
 import Control.Monad.Trans
 import Data.List
 import GHCJS.DOM.Document
+import GHCJS.DOM.Types
 import ProofCas.Backends.SFP.Status
 import ProofCas.Backends.SFP.Interface
 
@@ -47,10 +48,10 @@ fromCode bodyEl c = case parseStatus c of
 main :: IO ()
 main = mainWidgetWithCss $(embedFile "term.css") $ do
   ti <- textInput def
-  let newCode = tagPromptlyDyn (value ti) (textInputGetEnter ti)
+  let newCode = tagPromptlyDyn (value ti) (keypress Enter ti)
   document <- Control.Monad.Trans.lift askDocument
   Just rawBody <- getBody document
-  bodyEl <- wrapRawElement rawBody def
+  bodyEl <- wrapRawElement (toElement rawBody) def
   widgetHold (return ()) $ fromCode bodyEl <$> newCode
   return ()
 

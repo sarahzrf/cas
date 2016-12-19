@@ -24,10 +24,6 @@ html, body {
     padding: 0px;
 }
 
-.text {
-    pointer-events: none;
-}
-
 
 .term {
     text-align: center;

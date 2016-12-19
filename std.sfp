@@ -32,33 +32,33 @@ data Nat where
   | S (n : Nat) : Nat
 end
 
-let plus : Nat -> Nat -> Nat where
-  | plus Z     m = m
-  | plus (S n) m = S (plus n m)
+let op_43 : Nat -> Nat -> Nat where
+  | op_43 Z     m = m
+  | op_43 (S n) m = S (op_43 n m)
 end
 
 let times : Nat -> Nat -> Nat where
   | times Z     m = Z
-  | times (S n) m = plus m (times n m)
+  | times (S n) m = op_43 m (times n m)
 end
 
-let plus_S_shift : (x y : Nat) -> Op_61 Nat (plus (S x) y) (plus x (S y)) where
+let plus_S_shift : (x y : Nat) -> Op_61 Nat (op_43 (S x) y) (op_43 x (S y)) where
   | plus_S_shift Z     y = Refl Nat (S y)
   | plus_S_shift (S x) y =
       f_equal Nat Nat (\x -> S x)
-      (plus (S x) y) (plus x (S y))
+      (op_43 (S x) y) (op_43 x (S y))
       (plus_S_shift x y)
 end
 
-let plus_comm : (x y : Nat) -> Op_61 Nat (plus x y) (plus y x) where
+let plus_comm : (x y : Nat) -> Op_61 Nat (op_43 x y) (op_43 y x) where
   | plus_comm Z     Z     = Refl Nat Z
   | plus_comm Z     (S y) =
       f_equal Nat Nat (\x -> S x)
-      (plus Z y) (plus y Z)
+      (op_43 Z y) (op_43 y Z)
       (plus_comm Z y)
   | plus_comm (S x) y     =
-      eq_trans Nat (S (plus x y)) (S (plus y x)) (plus y (S x))
-      (f_equal Nat Nat (\x -> S x) (plus x y) (plus y x) (plus_comm x y))
+      eq_trans Nat (S (op_43 x y)) (S (op_43 y x)) (op_43 y (S x))
+      (f_equal Nat Nat (\x -> S x) (op_43 x y) (op_43 y x) (plus_comm x y))
       (plus_S_shift y x)
 end
 

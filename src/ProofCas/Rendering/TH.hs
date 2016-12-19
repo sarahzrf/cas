@@ -21,7 +21,7 @@ node :: ExpParser
 node = do
   nodeType <- try (char '<' >> many1 alphaNum)
   body <- [| mempty |] <$ string "/>" <|>
-    char '>' *> content <* string ("</" ++ nodeType ++ ">")
+    char '>' *> layer <* string ("</" ++ nodeType ++ ">")
   return [| rlel nodeType $body |]
 
 splice :: Char -> (ExpQ -> ExpQ) -> ExpParser
@@ -37,13 +37,13 @@ strSplice = splice '$' (appE [| fromString |])
 recSplice :: ExpParser
 recSplice = splice '%' (appE [| rlrec |])
 
-content :: ExpParser
-content = (\parts -> [| mconcat $(listE parts) |]) <$> many part
+layer :: ExpParser
+layer = (\parts -> [| mconcat $(listE parts) |]) <$> many part
   where part = literal <|> node <|> laySplice <|> strSplice <|> recSplice
 
 parseRL :: String -> ExpQ
 parseRL code = either (fail . show) id $
-  parse content "rl quasiquote" code
+  parse layer "rl quasiquote" code
 
 rl :: QuasiQuoter
 rl = QuasiQuoter {quoteExp = parseRL,
