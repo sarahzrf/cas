@@ -63,10 +63,10 @@ execRender :: Monad m => RenderCtx t id -> Render t id m -> m (RenderRes t id)
 execRender ctx = flip runReaderT ctx
 
 evOpt :: forall m en er t.
-  (DomSpace (DomBuilderSpace m)) =>
+  (DomSpace m) =>
   EventName en -> EventFlags ->
   ElementConfig er t m -> ElementConfig er t m
-evOpt en ef = elementConfig_eventSpec %~ addEventSpecFlags (Proxy @ (DomBuilderSpace m)) en (const ef)
+evOpt en ef = elementConfig_eventSpec %~ addEventSpecFlags (Proxy @ m) en (const ef)
 
 cn ~^ en = evOpt en stopPropagation cn
 cn ~- en = evOpt en preventDefault cn
@@ -103,7 +103,7 @@ termSpan stid termType contents = do
 
     (span, res) <- Reflex.Dom.element "span" conf' contents
 
-  dragE <- wrapDomEvent (_element_raw span) (onEventName Dragstart)
+  dragE <- wrapDomEvent (_element_raw span) (elementOnEventName Dragstart)
     (setCurrentDragData "dummy" "dummy")
   let ev :: EventName et -> Event t ()
       ev en = void (domEvent en span)
@@ -172,7 +172,8 @@ data StPart =
   deriving (Eq, Ord, Show)
 
 keybind :: Reflex t => Element EventResult d t -> Key -> Event t Key
-keybind bodyEl k = ffilter (==k) (keyCodeLookup <$> domEvent Keydown bodyEl)
+keybind bodyEl k =
+  ffilter (==k) (keyCodeLookup . fromIntegral <$> domEvent Keydown bodyEl)
 
 fromUpdates :: MonadWidget t m => a -> [Event t (a -> a)] -> m (Dynamic t a)
 fromUpdates initial updaters = foldDyn ($) initial (mergeWith (.) updaters)
